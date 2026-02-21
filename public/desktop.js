@@ -19,4 +19,5 @@ socket.on('signal', data => {
 
 peer.on('connect', () => {
     console.log('CONNECTED TO PHONE');
+    peer.send('The spirits say hello!');
 });

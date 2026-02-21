@@ -27,4 +27,4 @@ io.on('connection', (socket) => {
 });
 
 const PORT = 3000;
-server.listen(PORT, () => console.log(`Go to: http://localhost:${PORT}/desktop.html`));
+server.listen(PORT, () => console.log(`Go to: http://Ulrikas-MacBook-Pro.local:${PORT}/desktop.html`));
