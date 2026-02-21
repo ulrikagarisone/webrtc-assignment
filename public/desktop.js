@@ -12,3 +12,11 @@ const peer = new SimplePeer({ initiator: false, trickle: false });
 peer.on('signal', signal => {
     socket.emit('signal', { roomId, signal });
 });
+
+socket.on('signal', data => {
+    peer.signal(data.signal);
+});
+
+peer.on('connect', () => {
+    console.log('CONNECTED TO PHONE');
+});
