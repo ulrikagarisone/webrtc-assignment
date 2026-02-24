@@ -17,14 +17,22 @@ io.on('connection', (socket) => {
         console.log(`Socket joined room: ${roomId}`);
     });
 
-    // WebRTC signals (SDP/ICE candidates)
+    // WebRTC signals (SDP/ICE candidates) 
+    //It takes the connection data from one device and emits it to the other device in the same Room ID
     socket.on('signal', (data) => {
         socket.to(data.roomId).emit('signal', {
             sender: socket.id,
             signal: data.signal
         });
     });
+
+    socket.on('disconnect', () => {
+        console.log('Spirit vanished:', socket.id);
+        // This helps the server forget the old device so the new one can connect cleanly
+    });
 });
 
-const PORT = 3000;
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+const PORT = process.env.PORT || 3000; // Use the environment port or 3000
+server.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server is running on port ${PORT}`);
+});
