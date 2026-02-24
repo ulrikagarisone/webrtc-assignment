@@ -23,6 +23,13 @@ if (roomId) {
     peer.on('connect', () => {
         console.log('CONNECTED TO DESKTOP');
         peer.send('The spirits are restless...');
+        window.addEventListener('deviceorientation', (event) => {
+            const data = {
+                x: event.gamma, // Tilt Left/Right
+                y: event.beta   // Tilt Forward/Back
+            };
+            peer.send(JSON.stringify(data)); // Send the "spirits" to the Mac
+        });
     });
 
     peer.on('data', data => {
