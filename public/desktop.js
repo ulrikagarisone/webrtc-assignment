@@ -6,7 +6,7 @@ let targetX = window.innerWidth / 2;
 let targetY = window.innerHeight / 2;
 let currentX = targetX;
 let currentY = targetY;
-const friction = 0.05; //make it feel heavy
+const friction = 0.02; //make it feel heavy
 
 const url = `${window.location.protocol}//${window.location.host}/mobile.html?room=${roomId}`;
 QRCode.toCanvas(document.getElementById('qr-canvas'), url);

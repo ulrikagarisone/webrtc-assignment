@@ -45,6 +45,13 @@ if (roomId) {
     function startMoving() {
         window.addEventListener('deviceorientation', (event) => {
             const data = { x: event.gamma, y: event.beta };
+
+            // Tilt the image on the phone screen for feedback
+            const img = document.getElementById('planchette-img');
+            if (img) {
+                img.style.transform = `rotateY(${event.gamma}deg) rotateX(${-event.beta}deg)`;
+            }
+
             if (peer.connected) {
                 peer.send(JSON.stringify(data));
             }
@@ -52,10 +59,21 @@ if (roomId) {
     }
 
     peer.on('connect', () => {
-        console.log('CONNECTED TO DESKTOP');
-        document.body.style.backgroundColor = "#1a1a1a";
-        document.body.style.color = "red";
-        document.querySelector('h1').innerText = "You are the Spirit";
-    });;
+        document.getElementById('intro-ui').style.display = 'none';
+        const planchetteUI = document.getElementById('planchette-ui');
+        planchetteUI.style.display = 'flex';
+
+        setTimeout(() => {
+            planchetteUI.style.opacity = '1';
+        }, 10);
+    });
+
+    peer.on('close', () => {
+        document.body.style.backgroundColor = "white";
+        document.body.style.color = "black";
+        document.querySelector('h1').innerText = "The Spirit has left...";
+        alert("Connection lost. Please refresh the page!");
+    });
+
     peer.on('error', err => console.error('Peer error:', err));
 }
