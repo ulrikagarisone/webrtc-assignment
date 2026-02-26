@@ -233,3 +233,121 @@ I organized the scripts to ensure dependencies load before the main logic.
 - [x] Local server running with `npm start`
 - [x] One-to-one pairing via QR Code
 - [x] Successful WebRTC "CONNECTED" log in console
+
+# Phase 2: Polish, Physics & Paranormal Atmosphere (Feb 24 - 26, 2026)
+
+---
+
+## 1. The "Heavy" Movement (Physics & Math)
+
+**Goal:** Transition from a "mouse pointer" feel to a "heavy wooden board" feel.
+
+**The Problem:** Initially, the planchette "teleported" to the phone's coordinates. It felt digital and glitchy.
+
+**Implementation:**
+
+- **Lerp (Linear Interpolation):** I implemented a `currentX += (targetX - currentX) * friction` loop.
+- **Friction Tuning:** Set the friction to `0.05` to create a "ghostly" lag that feels like physical weight.
+- **Clamping:** Added `Math.max` and `Math.min` boundaries to ensure the spirit doesn't drag the planchette off-screen.
+
+**AI Reflection:** I collaborated with AI to understand the "Lerp" math. Initially, my planchette was flying off-screen because I was adding movement indefinitely; AI helped me implement "Clamping" to keep it within the window.
+
+---
+
+## 2. The Secure Handshake (The "Sensor Lock" Breakthrough)
+
+**Goal:** Unlock the mobile gyroscope to allow "Tilt-to-move" controls.
+
+**The Problem:** I saw a "Sensor Permission Denied" error in the mobile console. The phone connected, but wouldn't send data.
+
+**The AI Collaboration:** I prompted the AI about the error. It explained that modern browsers require a Secure Context (HTTPS) to access sensors. The AI suggested installing complex third-party SSL tools.
+
+**The Class Integration:** I recalled the class example using a local HTTPS server. Instead of following the AI's complex route, I used the class-approved method using `key.pem` and `cert.pem`.
+
+**The Fix:** Refactored `server.js` from an `http` server to an `https` server using the `fs` module to read my security keys.
+
+---
+
+## 3. Atmospheric UI (The Seance Experience)
+
+**Goal:** Replace the "Tech Demo" look with a mystical, fire-lit ritual interface.
+
+- **Flickering Candle Effect:** Created a CSS `@keyframes` animation that fluctuates `text-shadow` and `scale` to mimic a dancing flame.
+- **The "Stage" System:** Used CSS Flexbox and JavaScript to hide the "Intro" screen and reveal the "Controller" screen (featuring the `heart_teller.png` asset) only after a successful P2P connection.
+
+**The Brainstorming:**
+
+While setting up the tilt controls, the AI suggested that a static image on the phone felt "dead." To solve this, the AI proposed a **3D Parallax effect** — making the planchette on the phone screen tilt in real-time to match the physical tilt of the hand.
+
+**The AI's Code Suggestion:**
+
+The AI provided this specific logic to map the gyroscope's `gamma` and `beta` degrees directly to CSS 3D transforms:
+
+```javascript
+// AI-suggested code for real-time visual feedback:
+window.addEventListener('deviceorientation', (event) => {
+    const img = document.getElementById('planchette-img');
+
+    if (img) {
+        // Map phone tilt to 3D rotation
+        // rotateY uses gamma (left/right tilt)
+        // rotateX uses beta (forward/backward tilt)
+        img.style.transform = `rotateY(${event.gamma}deg) rotateX(${-event.beta}deg)`;
+    }
+});
+```
+
+**The Result:** By implementing this, I moved from a simple "data sender" to a **Tactile Controller**. The user gets immediate visual feedback on their phone, making the connection to the desktop planchette feel "magical" and physically linked.
+
+---
+
+## Code Evolution & AI Collaboration Log
+
+### 1. Movement Logic
+
+#### ❌ Initial AI Draft (Static Positioning)
+
+```javascript
+peer.on('data', data => {
+    const motion = JSON.parse(data);
+    planchette.style.left = motion.x + "px"; // Teleported instantly
+});
+```
+
+#### ✅ Refactored "Heavy" Final (Collaborative)
+
+```javascript
+function animate() {
+    // The "Chasing" math that makes it feel heavy
+    currentX += (targetX - currentX) * friction;
+    planchette.style.transform = `translate3d(${currentX}px, ${currentY}px, 0)`;
+    requestAnimationFrame(animate);
+}
+```
+
+---
+
+### 2. Server Security
+
+#### ❌ Initial AI Draft (Insecure)
+
+```javascript
+const http = require('http');
+const server = http.createServer(app); // Blocked sensors on mobile
+```
+
+#### ✅ Refactored "Secure" Final (Class Example Method)
+
+```javascript
+const https = require('https');
+
+const options = {
+    key: fs.readFileSync('key.pem'),
+    cert: fs.readFileSync('cert.pem')
+};
+
+const server = https.createServer(options, app); // Successfully unlocked Gyroscope
+```
+
+---
+
