@@ -51,6 +51,11 @@ if (roomId) {
         });
     }
 
-    peer.on('connect', () => { console.log('CONNECTED TO DESKTOP'); });
+    peer.on('connect', () => {
+        console.log('CONNECTED TO DESKTOP');
+        document.body.style.backgroundColor = "#1a1a1a";
+        document.body.style.color = "red";
+        document.querySelector('h1').innerText = "You are the Spirit";
+    });;
     peer.on('error', err => console.error('Peer error:', err));
 }
