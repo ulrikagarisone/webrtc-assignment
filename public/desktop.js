@@ -2,24 +2,51 @@ const socket = io();
 const roomId = Math.random().toString(36).substring(2, 11);
 socket.emit('join', roomId);
 
-// Generate QR Code
+let targetX = window.innerWidth / 2;
+let targetY = window.innerHeight / 2;
+let currentX = targetX;
+let currentY = targetY;
+const friction = 0.05; //make it feel heavy
+
 const url = `${window.location.protocol}//${window.location.host}/mobile.html?room=${roomId}`;
-QRCode.toCanvas(document.getElementById('qr-canvas'), url)
+QRCode.toCanvas(document.getElementById('qr-canvas'), url);
 
-// SimplePeer as receiver 
-const peer = new SimplePeer({ initiator: false, trickle: false });
+const peer = new SimplePeer({
+    initiator: false,
+    trickle: false,
+    config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
+});
 
-// Every time the desktop generates a piece of the signal, this code triggers
 peer.on('signal', signal => {
     socket.emit('signal', { roomId, signal });
 });
 
-// listens for any signals coming from the server
 socket.on('signal', data => {
     peer.signal(data.signal);
 });
 
-peer.on('connect', () => {
-    console.log('CONNECTED TO PHONE');
-    peer.send('The spirits say hello!');
+peer.on('data', data => {
+    try {
+        const motion = JSON.parse(data);
+        // tilt phone to move the triangle eye
+        targetX += motion.x * 2;
+        targetY += motion.y * 2;
+    } catch (e) {
+        console.log('Message:', data.toString());
+    }
 });
+
+function animate() {
+    // smoooooth movement math
+    currentX += (targetX - currentX) * friction;
+    currentY += (targetY - currentY) * friction;
+
+    const planchette = document.getElementById('planchette');
+    if (planchette) {
+        // update the position
+        planchette.style.left = `${currentX}px`;
+        planchette.style.top = `${currentY}px`;
+    }
+    requestAnimationFrame(animate);
+}
+animate();
