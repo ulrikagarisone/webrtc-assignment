@@ -1,14 +1,46 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 
 <head>
-    <title>Ouija board - desktop</title>
-    <link rel="stylesheet" href="style.css">
+    <title>Ouija Board</title>
+    <style>
+        body {
+            background: #222;
+            overflow: hidden;
+            color: white;
+            font-family: serif;
+        }
+
+        #planchette {
+            position: absolute;
+            width: 80px;
+            height: 80px;
+            background: rgba(240, 230, 200, 0.9);
+            border: 2px solid #543;
+            border-radius: 50% 50% 10% 50%;
+            transform: rotate(45deg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #eye {
+            width: 20px;
+            height: 20px;
+            border: 1px solid black;
+            border-radius: 50%;
+        }
+    </style>
 </head>
 
 <body>
     <h1>Ouija Board</h1>
     <canvas id="qr-canvas"></canvas>
+
+    <div id="planchette">
+        <div id="eye"></div>
+    </div>
+
     <script src="/socket.io/socket.io.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/simple-peer/9.11.1/simplepeer.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>

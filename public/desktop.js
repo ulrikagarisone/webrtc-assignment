@@ -28,11 +28,17 @@ socket.on('signal', data => {
 peer.on('data', data => {
     try {
         const motion = JSON.parse(data);
-        // tilt phone to move the triangle eye
+        console.log("Spirit Data Received:", motion);
+
         targetX += motion.x * 2;
         targetY += motion.y * 2;
+
+        // BOUNDARIES subtract 80 because that is the width planchette
+        targetX = Math.max(0, Math.min(window.innerWidth - 80, targetX));
+        targetY = Math.max(0, Math.min(window.innerHeight - 80, targetY));
+
     } catch (e) {
-        console.log('Message:', data.toString());
+        console.log('Spiritual Message:', data.toString());
     }
 });
 
