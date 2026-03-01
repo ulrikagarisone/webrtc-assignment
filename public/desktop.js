@@ -34,8 +34,8 @@ peer.on('data', data => {
         targetY += motion.y * 2;
 
         // BOUNDARIES subtract 80 because that is the width planchette
-        targetX = Math.max(0, Math.min(window.innerWidth - 80, targetX));
-        targetY = Math.max(0, Math.min(window.innerHeight - 80, targetY));
+        targetX = Math.max(0, Math.min(window.innerWidth - 250, targetX));
+        targetY = Math.max(0, Math.min(window.innerHeight - 250, targetY));
 
     } catch (e) {
         console.log('Spiritual Message:', data.toString());
@@ -56,3 +56,4 @@ function animate() {
     requestAnimationFrame(animate);
 }
 animate();
+
