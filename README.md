@@ -351,3 +351,206 @@ const server = https.createServer(options, app); // Successfully unlocked Gyrosc
 
 ---
 
+## 1. Initial Plan — AI Suggested WebRTC
+
+I asked AI what the best way to send real-time motion data between two devices was. It recommended **WebRTC via SimplePeer** 
+
+The idea: phone and desktop connect directly to each other ("peer-to-peer"), no server in the middle for the actual data.
+
+**AI-suggested code:**
+```javascript
+// Phone sends motion data directly to desktop
+const peer = new SimplePeer({ initiator: true, trickle: false });
+
+peer.on('signal', data => {
+    socket.emit('signal', { roomId, signal: data });
+});
+
+peer.on('connect', () => {
+    window.addEventListener('deviceorientation', (event) => {
+        peer.send(JSON.stringify({ x: event.gamma, y: event.beta }));
+    });
+});
+```
+
+```javascript
+// Desktop receives it
+peer.on('data', data => {
+    const motion = JSON.parse(data);
+    targetX += motion.x * 2.5;
+    targetY += motion.y * 2.5;
+});
+```
+
+This worked perfectly on my home Wi-Fi. I was happy. Then I went to school.
+
+---
+
+## 2. The Home vs. School Mystery
+
+**The problem:** Everything broke the moment I switched to school Wi-Fi or my phone hotspot.
+
+**What I figured out:**
+- **Home Wi-Fi** (`192.168.x.x`) — permissive NAT, devices can see each other directly ✅
+- **School Wi-Fi** (`172.30.x.x`) — uses **Client Isolation**. The firewall acts like a one-way mirror. Devices can reach the internet but cannot talk to each other directly ❌
+
+WebRTC needs the two devices to find each other on the network. On school Wi-Fi, they are invisible to each other.
+
+---
+
+## 3. The Dead Relay — TURN Server Failure
+
+To fix this, AI suggested adding a **TURN server** — a middleman that relays the data when direct connection is blocked.
+
+**AI-suggested TURN config:**
+```javascript
+const peer = new SimplePeer({
+    initiator: true,
+    trickle: false,
+    config: {
+        iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            {
+                urls: 'turn:openrelay.metered.ca:443',
+                username: 'openrelayproject',
+                credential: 'openrelayproject'
+            }
+        ]
+    }
+});
+```
+
+**What happened:** The console showed `Error: Connection failed` every time. The school network was so strict it blocked the DNS for `openrelay.metered.ca` entirely — the Mac could not even look up the address of the relay server. WebRTC was completely impossible on this network.
+
+---
+
+## 4. The Certificate Crisis — HTTPS & SSL
+
+While debugging, I also hit a second wall: the **gyroscope on iPhone requires HTTPS**. My original certificate was generated with OpenSSL for `localhost` only:
+
+```bash
+# Old cert — only covers localhost, breaks when IP changes
+openssl req -x509 -out localhost.crt -keyout localhost.key \
+  -subj '/CN=localhost'
+```
+
+When the IP address changed at school (`172.30.97.16`), the browser saw that the certificate did not match and killed the connection. Sensors were blocked.
+
+**The fix — mkcert:**
+
+Instead of the complex third-party tools AI suggested, I used the class-approved method: `mkcert`. This creates a local Certificate Authority your devices can trust.
+
+```bash
+brew install mkcert
+mkcert -install
+mkcert localhost 127.0.0.1 ::1
+mv localhost+2.pem localhost.crt
+mv localhost+2-key.pem localhost.key
+```
+
+Updated `server.js` to use HTTPS:
+```javascript
+const https = require('https');
+const fs = require('fs');
+
+const options = {
+    key: fs.readFileSync('./localhost.key'),
+    cert: fs.readFileSync('./localhost.crt')
+};
+
+const server = https.createServer(options, app);
+```
+
+AirDropped the `rootCA.pem` to my iPhone and enabled **Full Trust** in iOS Settings → Certificate Trust Settings. Now the phone trusted my laptop as a secure server on any network.
+
+---
+
+## 5. The Final Fix — Socket.io Relay Architecture
+
+After days of fighting WebRTC, I had a realization: **both devices were already connected to my laptop via Socket.io for the signalling layer**. I did not need WebRTC at all. I could just use the Socket.io connection that was already there to relay the motion data directly.
+
+**Old architecture (broken at school):**
+```
+Phone ──(blocked P2P)──> Desktop
+```
+
+**New architecture (works everywhere):**
+```
+Phone ──> Socket.io Server (my laptop) ──> Desktop
+```
+
+### The refactor — 3 files changed:
+
+**server.js — from "signalling helper" to "data messenger":**
+```javascript
+io.on('connection', (socket) => {
+    socket.on('join', async (roomId) => {
+        await socket.join(roomId);
+        const room = io.sockets.adapter.rooms.get(roomId);
+        // Tell desktop when phone joins the room
+        if (room && room.size === 2) {
+            socket.to(roomId).emit('peer-joined', socket.id);
+        }
+    });
+
+    // Simply relay motion from phone to desktop — no WebRTC needed
+    socket.on('motion', (data) => {
+        socket.to(data.roomId).emit('motion', data);
+    });
+});
+```
+
+**mobile.js — removed SimplePeer entirely:**
+```javascript
+// ❌ Before: complex WebRTC peer connection
+const peer = new SimplePeer({ initiator: true, trickle: false, config: { iceServers: [...] } });
+peer.on('connect', () => {
+    peer.send(JSON.stringify({ x: event.gamma, y: event.beta }));
+});
+
+// ✅ After: just use the socket that is already connected
+function startMoving() {
+    window.addEventListener('deviceorientation', (event) => {
+        // Visual feedback — tilt the planchette image on the phone
+        const img = document.getElementById('planchette-img');
+        if (img) {
+            img.style.transform = `rotateY(${event.gamma}deg) rotateX(${-event.beta}deg)`;
+        }
+        // Send motion through server relay — works on any network
+        socket.emit('motion', { roomId, x: event.gamma, y: event.beta });
+    });
+}
+```
+
+**desktop.js — removed SimplePeer, just listen for motion:**
+```javascript
+// ❌ Before: waiting for WebRTC peer connection
+peer.on('data', data => {
+    const motion = JSON.parse(data);
+    targetX += motion.x * 2.5;
+});
+
+// ✅ After: listen for the server relay event
+socket.on('motion', (data) => {
+    targetX += data.x * 2.5;
+    targetY += data.y * 2.5;
+    targetX = Math.max(0, Math.min(window.innerWidth - 250, targetX));
+    targetY = Math.max(0, Math.min(window.innerHeight - 250, targetY));
+});
+```
+
+**Result:** Works on home Wi-Fi, school Wi-Fi, hotspot — any network where the phone can reach the laptop. No external servers, no TURN relays, no complexity.
+
+---
+
+## AI Reflection
+
+| | What happened |
+|---|---|
+| **What AI suggested** | WebRTC P2P via SimplePeer — technically correct for low latency |
+| **Why it failed** | School network blocks P2P and TURN relay DNS entirely |
+| **What AI missed** | The simpler solution already existed — Socket.io was already connected |
+| **What I changed** | Removed WebRTC completely, used Socket.io relay instead |
+| **What I learned** | AI gives the "industry standard" answer, not the "works in your specific situation" answer |
+
+
