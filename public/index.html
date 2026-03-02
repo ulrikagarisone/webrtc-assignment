@@ -1,16 +1,86 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 
 <head>
-    <title>Ouija board - desktop</title>
-    <link rel="stylesheet" href="style.css">
+    <title>Ouija Board</title>
+    <style>
+        body {
+            background: radial-gradient(circle, #3d2b1f 0%, #1a110a 100%);
+            overflow: hidden;
+            color: #d4af37;
+            font-family: 'Garamond', serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 0;
+        }
+
+        h1 {
+            font-size: 4rem;
+            letter-spacing: 15px;
+            text-transform: uppercase;
+            margin-top: 20px;
+            opacity: 0.7;
+            text-shadow: 2px 2px 10px black;
+        }
+
+        #qr-canvas {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 120px !important;
+            height: 120px !important;
+            border: 2px solid #d4af37;
+            box-shadow: 0 0 15px rgba(212, 175, 55, 0.3);
+        }
+
+        /* The Moving Planchette */
+        #planchette {
+            position: absolute;
+            width: 250px;
+            height: auto;
+            z-index: 100;
+            cursor: none;
+            filter: drop-shadow(0 10px 20px rgba(0, 0, 0, 0.8));
+        }
+
+        #planchette img {
+            width: 100%;
+            height: auto;
+        }
+
+        .board-content {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 80%;
+            text-align: center;
+            font-size: 4rem;
+            letter-spacing: 20px;
+            pointer-events: none;
+            opacity: 0.4;
+        }
+    </style>
 </head>
 
 <body>
     <h1>Ouija Board</h1>
+
+    <div class="board-content">
+        <p>YES &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; NO</p>
+        <p>A B C D E F G H I J K L M</p>
+        <p>N O P Q R S T U V W X Y Z</p>
+        <p>1 2 3 4 5 6 7 8 9 0</p>
+    </div>
+
     <canvas id="qr-canvas"></canvas>
+
+    <div id="planchette">
+        <img src="/assets/heart_teller.png" alt="planchette">
+    </div>
+
     <script src="/socket.io/socket.io.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/simple-peer/9.11.1/simplepeer.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
     <script src="desktop.js"></script>
 </body>

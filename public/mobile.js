@@ -3,33 +3,47 @@ const urlParams = new URLSearchParams(window.location.search);
 const roomId = urlParams.get('room');
 
 if (roomId) {
-    // Tell the server we are joining
     socket.emit('join', roomId);
 
-    // Wait a tiny bit or just start after the emit
-    // SimplePeer as initiator 
-    const peer = new SimplePeer({ initiator: true, trickle: false });
+    const startBtn = document.getElementById('start');
+    startBtn.addEventListener('click', () => {
+        startBtn.style.display = 'none';
 
-    peer.on('signal', signal => {
-        console.log('Mobile generated signal, sending to desktop...');
-        socket.emit('signal', { roomId, signal });
+        if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+            DeviceOrientationEvent.requestPermission()
+                .then(state => {
+                    if (state === 'granted') {
+                        showPlanchetteUI();
+                        startMoving();
+                    } else {
+                        alert("Permission denied. Spirits require sensors!");
+                    }
+                })
+                .catch(console.error);
+        } else {
+            showPlanchetteUI();
+            startMoving();
+        }
     });
 
-    socket.on('signal', data => {
-        console.log('Mobile received signal from desktop');
-        peer.signal(data.signal);
-    });
+    function showPlanchetteUI() {
+        document.getElementById('intro-ui').style.display = 'none';
+        const planchetteUI = document.getElementById('planchette-ui');
+        planchetteUI.style.display = 'flex';
+        setTimeout(() => { planchetteUI.style.opacity = '1'; }, 10);
+    }
 
-    peer.on('connect', () => {
-        console.log('CONNECTED TO DESKTOP');
-        peer.send('The spirits are restless...');
-    });
+    function startMoving() {
+        window.addEventListener('deviceorientation', (event) => {
+            // Tilt the image on the phone for local feedback
+            const img = document.getElementById('planchette-img');
+            if (img) {
+                img.style.transform = `rotateY(${event.gamma}deg) rotateX(${-event.beta}deg)`;
+            }
 
-    peer.on('data', data => {
-        console.log('Message from Mac:', data.toString());
-        alert('The Mac says: ' + data.toString());
-    });
-
-    // to catch errors
-    peer.on('error', err => console.error('Peer error:', err));
+            // Send motion directly through socket.io — no WebRTC needed.
+            // The server relays it to the desktop in the same room.
+            socket.emit('motion', { roomId, x: event.gamma, y: event.beta });
+        });
+    }
 }
