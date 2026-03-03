@@ -542,15 +542,161 @@ socket.on('motion', (data) => {
 **Result:** Works on home Wi-Fi, school Wi-Fi, hotspot — any network where the phone can reach the laptop. No external servers, no TURN relays, no complexity.
 
 ---
+## Day 2 — Consulsult & Rebuilding Clean
 
-## AI Reflection
+After the first session where AI gave me an over-engineered solution with TURN servers and fallback timers, I had consult. The code was way too complex and that I should just follow the class pattern — simple SimplePeer, one STUN server, that's it.
 
-| | What happened |
-|---|---|
-| **What AI suggested** | WebRTC P2P via SimplePeer — technically correct for low latency |
-| **Why it failed** | School network blocks P2P and TURN relay DNS entirely |
-| **What AI missed** | The simpler solution already existed — Socket.io was already connected |
-| **What I changed** | Removed WebRTC completely, used Socket.io relay instead |
-| **What I learned** | AI gives the "industry standard" answer, not the "works in your specific situation" answer |
+So I rebuilt everything from scratch following the class examples.
 
+---
+
+### The Simple Server (following class pattern exactly)
+
+The server has two jobs: manage rooms, and relay signals between peers.
+
+```javascript
+io.on('connection', (socket) => {
+    clients[socket.id] = { id: socket.id };
+
+    socket.on('join', (roomId) => {
+        socket.join(roomId);
+        const room = io.sockets.adapter.rooms.get(roomId);
+        if (room && room.size === 2) {
+            // tell the phone the desktop's real socket.id
+            const desktopId = [...room][0];
+            socket.emit('peer-joined', desktopId);
+        }
+    });
+
+    // relay signals between peers — exactly like class example
+    socket.on('signal', (peerId, signal) => {
+        console.log(`Received signal from ${socket.id} to ${peerId}`);
+        io.to(peerId).emit('signal', peerId, signal, socket.id);
+    });
+
+    socket.on('disconnect', () => {
+        delete clients[socket.id];
+    });
+});
+```
+
+---
+
+### Problem 1 — "Spirit detected!" fired twice
+
+Desktop was logging "Spirit detected!" twice and then immediately erroring. This happened because `peer-joined` was being sent to everyone in the room instead of just the phone.
+
+**The fix:** Only emit `peer-joined` when the second person joins (`room.size === 2`), and send it only to that second person with `socket.emit` (not `socket.to`):
+
+```javascript
+if (room && room.size === 2) {
+    const desktopId = [...room][0]; // first joiner = desktop
+    socket.emit('peer-joined', desktopId); // only tell the phone
+}
+```
+
+---
+
+### Problem 2 — Signals arriving but peer immediately erroring
+ Desktop was logging "received signal 7 times" then "error" then "closed". Signals were arriving but the connection never completed.
+
+**The root cause:** Mobile was sending signals to `roomId` (a random string like `q6601qq3y`) instead of the desktop's real socket.id. The server was doing `io.to(peerId)` but the peerId was a room name, not a socket — so the desktop never actually received the signals properly.
+
+**Wrong mobile.js (what I had):**
+```javascript
+socket.on('connect', () => {
+    socket.emit('join', roomId);
+    createPeer(true, roomId); // ❌ roomId is not a socket.id!
+});
+
+peer.on('signal', data => {
+    socket.emit('signal', roomId, data); // ❌ signals go nowhere
+});
+```
+
+**Fixed mobile.js — wait for desktop's real socket.id:**
+```javascript
+let desktopId = null;
+
+socket.on('connect', () => {
+    socket.emit('join', roomId);
+    // don't create peer yet — wait for desktop's real id
+});
+
+socket.on('peer-joined', (id) => {
+    desktopId = id; // ✅ now we have the desktop's real socket.id
+    createPeer(true, desktopId);
+});
+
+const createPeer = (initiator, peerId) => {
+    peer = new SimplePeer({
+        initiator,
+        trickle: true,
+        config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
+    });
+
+    peer.on('signal', data => {
+        socket.emit('signal', peerId, data); // ✅ sending to real socket.id
+    });
+
+    peer.on('connect', () => {
+        console.log('CONNECTED!');
+        if (navigator.vibrate) navigator.vibrate(200);
+    });
+
+    peer.on('close', () => { peer = null; });
+    peer.on('error', () => console.log('error'));
+};
+```
+
+---
+
+### Desktop —  receiver
+
+Desktop does NOT create the peer on `peer-joined`. Instead it waits for the signal to arrive, and only creates the peer when an `offer` comes in — exactly like my teacher's `receiver.html`:
+
+```javascript
+socket.on('signal', (myId, signal, peerId) => {
+    console.log('Desktop received signal from', peerId);
+    if (peer) {
+        peer.signal(signal); // already exists, just pass signal
+    } else if (signal.type === 'offer') {
+        createPeer(false, peerId); // ✅ create only when offer arrives
+        peer.signal(signal);
+    }
+});
+
+const createPeer = (initiator, peerId) => {
+    peer = new SimplePeer({
+        initiator,
+        trickle: true,
+        config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
+    });
+
+    peer.on('signal', data => {
+        socket.emit('signal', peerId, data);
+    });
+
+    peer.on('connect', () => {
+        console.log('CONNECTED!');
+        document.getElementById('qr-canvas').style.display = 'none';
+    });
+
+    // receive gyroscope data over WebRTC data channel
+    peer.on('data', data => {
+        try {
+            const motion = JSON.parse(data);
+            targetX += motion.x * 2.5;
+            targetY += motion.y * 2.5;
+            targetX = Math.max(0, Math.min(window.innerWidth - 250, targetX));
+            targetY = Math.max(0, Math.min(window.innerHeight - 250, targetY));
+        } catch (e) { }
+    });
+
+    peer.on('close', () => { peer = null; });
+    peer.on('error', () => console.log('error'));
+};
+```
+
+---
 
