@@ -9,48 +9,45 @@ const options = {
     key: fs.readFileSync('./localhost.key'),
     cert: fs.readFileSync('./localhost.crt')
 };
-
 const server = https.createServer(options, app);
+const port = process.env.PORT || 3000;
 const io = new Server(server);
+const clients = {};
 
 app.use(express.static('public'));
 
 io.on('connection', (socket) => {
-    socket.on('join', async (roomId) => {
-        await socket.join(roomId);
+    clients[socket.id] = { id: socket.id };
+    console.log('Socket connected', socket.id);
+
+    socket.on('join', (roomId) => {
+        socket.join(roomId);
         const room = io.sockets.adapter.rooms.get(roomId);
         if (room && room.size === 2) {
-            socket.to(roomId).emit('peer-joined', socket.id);
+            // tell the phone (second joiner) the desktop's socket.id
+            const desktopId = [...room][0]; // first person who joined = desktop
+            socket.emit('peer-joined', desktopId);
         }
     });
 
-    // Relay motion data from phone to desktop through the server.
-    // This bypasses WebRTC/TURN entirely and works on any network since
-    // both devices are already connected to this server via socket.io.
-    socket.on('motion', (data) => {
-        socket.to(data.roomId).emit('motion', data);
+    socket.on('signal', (peerId, signal) => {
+        console.log(`Received signal from ${socket.id} to ${peerId}`);
+        io.to(peerId).emit('signal', peerId, signal, socket.id);
     });
 
-    socket.on('signal', (data) => {
-        if (data.to) {
-            io.to(data.to).emit('signal', { signal: data.signal, from: socket.id });
-        } else if (data.roomId) {
-            socket.to(data.roomId).emit('signal', { signal: data.signal, from: socket.id });
-        }
+    socket.on('disconnect', () => {
+        delete clients[socket.id];
     });
 });
 
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, '0.0.0.0', () => {
+server.listen(port, () => {
     const interfaces = os.networkInterfaces();
-    let localIp = 'localhost';
     for (const name of Object.keys(interfaces)) {
         for (const net of interfaces[name]) {
             if (net.family === 'IPv4' && !net.internal) {
-                localIp = net.address;
+                console.log(`https://${net.address}:${port}`);
             }
         }
     }
-    console.log(`OUIJA SERVER IS LIVE`);
-    console.log(`https://${localIp}:${PORT}`);
+    console.log(`OUIJA SERVER IS LIVE on port ${port}`);
 });
