@@ -7,17 +7,17 @@ let currentX = targetX;
 let currentY = targetY;
 const friction = 0.02;
 let peer;
+let ghostImage = null;
+let ghostCooldown = false;
 
 socket.on('connect', () => {
     console.log('Desktop connected:', socket.id);
     socket.emit('join', roomId);
     const url = `${window.location.protocol}//${window.location.host}/mobile.html?room=${roomId}`;
-    QRCode.toCanvas(document.getElementById('qr-canvas'), url);
+    QRCode.toCanvas(document.querySelector('#qr-canvas'), url);
 });
 
-// exactly like teacher's receiver.html — wait for signal, not peer-joined
 socket.on('signal', (myId, signal, peerId) => {
-    console.log('Desktop received signal from', peerId);
     if (peer) {
         peer.signal(signal);
     } else if (signal.type === 'offer') {
@@ -33,39 +33,57 @@ const createPeer = (initiator, peerId) => {
         config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
     });
 
-    peer.on('signal', data => {
-        socket.emit('signal', peerId, data);
+    peer.on('stream', stream => {
+        console.log('Stream received!');
+        const $video = document.querySelector('#otherCamera');
+        $video.srcObject = stream;
+        $video.onloadedmetadata = () => {
+            $video.play();
+            setTimeout(() => trySnapshot(), 1500);
+            setTimeout(() => trySnapshot(), 3000);
+            setTimeout(() => trySnapshot(), 5000);
+        };
     });
+
+    peer.on('signal', data => { socket.emit('signal', peerId, data); });
 
     peer.on('connect', () => {
         console.log('CONNECTED!');
-        document.getElementById('qr-canvas').style.display = 'none';
+        document.querySelector('#qr-canvas').style.display = 'none';
     });
 
     peer.on('data', data => {
         try {
             const motion = JSON.parse(data);
-            targetX += motion.x * 2.5;
-            targetY += motion.y * 2.5;
-            targetX = Math.max(0, Math.min(window.innerWidth - 250, targetX));
-            targetY = Math.max(0, Math.min(window.innerHeight - 250, targetY));
+            targetX = Math.max(0, Math.min(window.innerWidth - 250, targetX + (motion.x * 2.5)));
+            targetY = Math.max(0, Math.min(window.innerHeight - 250, targetY + (motion.y * 2.5)));
+            const intensity = Math.abs(motion.x) + Math.abs(motion.y);
+            if (!ghostImage) trySnapshot();
+            if (intensity > 60) hauntScreen();
         } catch (e) { }
     });
 
-    peer.on('close', () => {
-        console.log('closed');
-        peer = null;
-    });
-
-    peer.on('error', () => {
-        console.log('error');
-    });
+    peer.on('close', () => { peer = null; });
+    peer.on('error', (e) => console.log('peer error', e));
 };
+
+// Pre-load ghost sheet
+const ghostSheet = new Image();
+ghostSheet.src = '/assets/ghost.png';
+ghostSheet.onload = () => console.log(' Ghost sheet loaded');
+
+function trySnapshot() {
+    if (ghostImage) return;
+    const $video = document.querySelector('#otherCamera');
+    if (!$video.srcObject || $video.videoWidth === 0) return;
+    buildGhostImage($video);
+}
+
 
 function animate() {
     currentX += (targetX - currentX) * friction;
     currentY += (targetY - currentY) * friction;
-    const planchette = document.getElementById('planchette');
+    const planchette = document.querySelector('#planchette');
     if (planchette) {
         planchette.style.left = `${currentX}px`;
         planchette.style.top = `${currentY}px`;
