@@ -34,7 +34,6 @@
             box-shadow: 0 0 15px rgba(212, 175, 55, 0.3);
         }
 
-        /* The Moving Planchette */
         #planchette {
             position: absolute;
             width: 250px;
@@ -42,6 +41,7 @@
             z-index: 100;
             cursor: none;
             filter: drop-shadow(0 10px 20px rgba(0, 0, 0, 0.8));
+            pointer-events: none;
         }
 
         #planchette img {
@@ -61,6 +61,63 @@
             pointer-events: none;
             opacity: 0.4;
         }
+
+        #ghost-container {
+            position: fixed;
+            width: 320px;
+            height: 457px;
+            opacity: 0;
+            z-index: 999;
+            pointer-events: none;
+            transition: opacity 0.5s ease-in;
+            animation: ghostFloat 2.5s ease-in-out infinite;
+            filter: drop-shadow(0 0 25px rgba(150, 200, 255, 0.5));
+        }
+
+        @keyframes ghostFloat {
+
+            0%,
+            100% {
+                transform: translateY(0px) rotate(-1.5deg);
+            }
+
+            50% {
+                transform: translateY(-25px) rotate(1.5deg);
+            }
+        }
+
+        #ghost-face-img {
+            width: 100%;
+            height: 100%;
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center top;
+        }
+
+        .smoke {
+            position: fixed;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(180, 210, 255, 0.2) 0%, transparent 70%);
+            pointer-events: none;
+            z-index: 998;
+            animation: smokeFade 1.8s ease-out forwards;
+        }
+
+        @keyframes smokeFade {
+            0% {
+                opacity: 1;
+                transform: scale(1);
+            }
+
+            100% {
+                opacity: 0;
+                transform: scale(3) translateY(-40px);
+            }
+        }
+
+        #otherCamera {
+            display: none;
+        }
     </style>
 </head>
 
@@ -68,17 +125,21 @@
     <h1>Ouija Board</h1>
 
     <div class="board-content">
-        <p>YES &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; NO</p>
         <p>A B C D E F G H I J K L M</p>
         <p>N O P Q R S T U V W X Y Z</p>
-        <p>1 2 3 4 5 6 7 8 9 0</p>
     </div>
 
     <canvas id="qr-canvas"></canvas>
 
     <div id="planchette">
-        <img src="/assets/heart_teller.png" alt="planchette">
+        <img src="/assets/heart_teller.png" id="planchette-img" alt="Planchette">
     </div>
+
+    <div id="ghost-container">
+        <div id="ghost-face-img"></div>
+    </div>
+
+    <video id="otherCamera" playsinline autoplay muted></video>
 
     <script src="/socket.io/socket.io.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/simple-peer/9.11.1/simplepeer.min.js"></script>
