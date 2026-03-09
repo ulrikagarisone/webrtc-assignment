@@ -123,14 +123,11 @@
 
 <body>
     <h1>Ouija Board</h1>
-
     <div class="board-content">
         <p>A B C D E F G H I J K L M</p>
         <p>N O P Q R S T U V W X Y Z</p>
     </div>
-
     <canvas id="qr-canvas"></canvas>
-
     <div id="planchette">
         <img src="/assets/heart_teller.png" id="planchette-img" alt="Planchette">
     </div>
@@ -138,9 +135,12 @@
     <div id="ghost-container">
         <div id="ghost-face-img"></div>
     </div>
-
+    <div id="ghost-container">
+        <div id="ghost-face-img">
+            <img src="/assets/ghost.png" alt="ghost-face">
+        </div>
+    </div>
     <video id="otherCamera" playsinline autoplay muted></video>
-
     <script src="/socket.io/socket.io.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/simple-peer/9.11.1/simplepeer.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>

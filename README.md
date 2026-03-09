@@ -700,3 +700,424 @@ const createPeer = (initiator, peerId) => {
 
 ---
 
+# Dev Diary — Day 3 (March 7, 2026)
+## Ghost Camera Feature 
+
+---
+
+## What I Was Trying to Build
+
+I wanted to add a bonus feature: when you tilt the phone hard enough, a ghost appears on the desktop screen and flies across it. The twist — the ghost would show **your actual face** from the phone's front camera, composited onto a ghost image. Spooky and personal.
+
+---
+
+## Part 1 — Switching Back to WebRTC (for the Camera Stream)
+
+The project had previously been simplified to a Socket.io relay for motion data (no WebRTC). But to send a **live camera stream** from phone to desktop, I needed WebRTC back — Socket.io can't carry video.
+
+I asked AI to help re-introduce SimplePeer alongside the existing Socket.io signalling. The key architectural decision: **Socket.io stays for signalling only, SimplePeer handles the camera stream and motion data**.
+
+**AI gave me this signalling pattern:**
+```javascript
+// server.js
+socket.on('signal', (peerId, signal) => {
+    io.to(peerId).emit('signal', peerId, signal, socket.id);
+});
+
+// desktop.js — wait for an offer before creating peer
+socket.on('signal', (myId, signal, peerId) => {
+    if (peer) {
+        peer.signal(signal);
+    } else if (signal.type === 'offer') {
+        createPeer(false, peerId);
+        peer.signal(signal);
+    }
+});
+```
+
+**The bug I had to fix myself:**
+
+Mobile was sending signals to `roomId` (a random string like `"q6601qq3y"`) instead of the desktop's actual `socket.id`. The peer connection was going nowhere.
+
+```javascript
+// BROKEN — sending signal to room name, not socket id
+socket.emit('signal', roomId, data);
+
+// FIXED — server tells phone the desktop's real socket.id
+socket.on('peer-joined', (desktopSocketId) => {
+    desktopId = desktopSocketId;
+    createPeer(true, desktopId); // now signals go to the right place
+});
+```
+
+On the server side I added one line to send the desktop's real id to the phone:
+```javascript
+socket.on('join', (roomId) => {
+    socket.join(roomId);
+    const room = io.sockets.adapter.rooms.get(roomId);
+    if (room && room.size === 2) {
+        const desktopId = [...room][0];
+        socket.emit('peer-joined', desktopId); // tell phone who to signal
+    }
+});
+```
+
+---
+
+## Part 2 — The Ghost Trigger (`hauntScreen`)
+
+AI suggested triggering the ghost when motion **intensity** (the combined tilt of both axes) crossed a threshold.
+
+**AI gave me this:**
+```javascript
+const intensity = Math.abs(motion.x) + Math.abs(motion.y);
+if (intensity > 25) {
+    hauntScreen();
+}
+```
+
+**Problem:** The threshold of 25 was way too low. Just holding the phone at a slight angle would constantly trigger the ghost. I debugged it by adding console logs to see real values:
+
+```javascript
+console.log('intensity:', intensity.toFixed(1), '| ghostImage:', !!ghostImage);
+```
+
+Watching the actual numbers, I saw normal holding was already around 40–50, so I changed the threshold to `> 60`. That way you have to **actually tilt it hard** to trigger the ghost.
+
+I also added a `ghostCooldown` boolean so the ghost can't spam-trigger while you're holding the phone sideways, and a retry loop in `takeSnapshot()` because AI's original version would silently fail if the video wasn't ready yet:
+
+```javascript
+// AI version — silent fail if video not ready
+function takeSnapshot() {
+    const canvas = document.createElement('canvas');
+    ctx.drawImage($video, 0, 0);
+    ghostImage = canvas.toDataURL('image/png');
+}
+
+// My version — keeps retrying
+function takeSnapshot() {
+    if ($video.videoWidth === 0) {
+        setTimeout(takeSnapshot, 1000); // retry
+        return;
+    }
+    // ... draw to canvas
+}
+```
+
+---
+
+## Part 3 — The Race Condition Bug (Camera Not Arriving)
+
+The trickiest bug of the day. `ghostImage` was always `false` even though the peer connection was working and motion data was flowing.
+
+**Root cause:** A race condition between two things that needed to happen before the peer could be created with a camera stream:
+1. Desktop sends its socket.id to phone (`peer-joined` event)
+2. User clicks the button → camera permission requested → stream ready
+
+If `peer-joined` arrived **before** the button was clicked (which it always did, sockets are fast), the phone would store `desktopId` but `myStream` was still null. Then when the button was clicked and the camera loaded, `createPeer` was called — but the peer was created with `stream: null` so no video was ever sent.
+
+**AI's attempt** used `async/await` inside a socket event which was messy. I rewrote it with a simple `buttonClicked` flag:
+
+```javascript
+// My solution — two flags, whoever arrives last connects
+let buttonClicked = false;
+
+socket.on('peer-joined', (id) => {
+    desktopId = id;
+    if (buttonClicked) createPeer(true, desktopId); // camera already ready
+});
+
+startBtn.addEventListener('click', async () => {
+    myStream = await navigator.mediaDevices.getUserMedia({ video: true });
+    buttonClicked = true;
+    if (desktopId) createPeer(true, desktopId); // desktop already ready
+});
+```
+
+Whichever arrives last (camera OR desktop id) is the one that calls `createPeer`, guaranteeing both are ready.
+
+---
+
+## Part 4 — Ghost Visual Design
+
+**First attempt (AI suggestion):** Show the face in a circle with `border-radius: 50%`. I didn't like it — looked like a profile picture floating on screen, not a ghost.
+
+**Second attempt (AI suggestion):** Use CSS `border-radius: 50% 50% 30% 30%` to make a ghost body shape, with a floating CSS animation. Better but still not what I wanted.
+
+**What I actually wanted:** A real photo of a ghost (like a sheet ghost) with my face composited onto the face area, flying across the screen.
+
+I uploaded a ghost photo and AI helped remove the background using Python/Pillow to make it transparent:
+
+```python
+brightness = (r + g + b) / 3
+is_dark = brightness < 130
+is_orange = (r > 150) & (g < 120) & (b < 80)  # removes pumpkin
+alpha = np.where(is_dark | is_orange, 0, np.clip((brightness - 100) * 2, 0, 255))
+```
+
+**Compositing order I figured out myself:**
+
+AI originally put the face *behind* the ghost sheet at very low opacity — you couldn't see it at all. I switched the order:
+
+```javascript
+// LAYER 1: ghost sheet as base
+ctx.drawImage(ghostSheet, 0, 0, W, H);
+
+// LAYER 2: face ON TOP, clipped to face-hole oval — full brightness
+ctx.save();
+ctx.beginPath();
+ctx.ellipse(faceCX, faceCY, faceRX, faceRY, 0, 0, Math.PI * 2);
+ctx.clip();
+ctx.filter = 'grayscale(0.8) brightness(1.0) contrast(1.15)';
+ctx.drawImage($video, ...);
+ctx.restore();
+
+// LAYER 3: ghost sheet again at 25% — subtle veil so face looks inside the ghost
+ctx.globalAlpha = 0.25;
+ctx.drawImage(ghostSheet, 0, 0, W, H);
+```
+
+This gives the effect of the face being inside the ghost rather than just stuck on top of it.
+
+**Size tuning I did manually:**
+
+```javascript
+// AI had this at 2.8 — face was bigger than the ghost head
+const drawSize = faceRX * 2.0; // I changed to 2.0, fits the face hole correctly
+```
+
+---
+
+## Part 5 — Snapshot Timing
+
+Originally the snapshot only happened when the phone was tilted hard (on the `hauntScreen` trigger). So if you never tilted hard enough, you'd never get a ghost face.
+
+I changed it to take the snapshot **immediately** when the stream arrives, with multiple retries:
+
+```javascript
+peer.on('stream', stream => {
+    $video.srcObject = stream;
+    $video.onloadedmetadata = () => {
+        $video.play();
+        // Take it right away, don't wait for tilting
+        setTimeout(() => trySnapshot(), 1500);
+        setTimeout(() => trySnapshot(), 3000);
+        setTimeout(() => trySnapshot(), 5000);
+    };
+});
+```
+
+Also added a retry on every motion packet until the snapshot succeeds:
+```javascript
+peer.on('data', data => {
+    if (!ghostImage) trySnapshot(); // keep trying until we have a face
+    // ...
+});
+```
+
+---
+
+# Dev Diary (March 9, 2026)
+## Letter Detection + Phone Feedback — AI Usage & What I Actually Changed
+
+---
+
+## What I Was Trying to Build Today
+
+Coming in, the core tilting mechanic worked. Today's goals:
+
+- Map the Ouija board letters so the planchette detects when it's over a letter (A–Z, YES, NO)
+- When a letter is hit, glow it on the desktop and send a signal back to the phone
+- Phone gives feedback when a letter is selected
+- Fix a regression — the motion had broken again and needed debugging back to a working state
+
+---
+
+## Part 1 — Debugging: Motion Broke Again
+
+### The Problem
+
+Desktop showed `CONNECTED` and `Ghost+face composite ready!` but zero motion. Same symptom as a bug from Day 3.
+
+### What AI Tried (Did Not Work)
+
+- Adding `data.toString()` to the JSON.parse call
+- Adding a `motion.x !== undefined` check
+- Adding a `readyToSend` delay flag in mobile.js (made it worse, had to revert)
+
+### Root Cause I Found
+
+Looking at the console I saw this error:
+
+```
+peer error OperationError: User-Initiated Abort, reason=Close called
+```
+
+AI had re-introduced a `peer.destroy()` block when helping with a different problem. It was killing the working peer right after connection:
+
+```javascript
+// THIS WAS KILLING THE CONNECTION
+if (peer && myStream) {
+    peer.destroy();   // destroys the working peer
+    peer = null;
+    createPeer(true, desktopId);  // creates a new broken one
+}
+```
+
+### My Fix
+
+Removed the entire destroy block. Reverted to the simple `buttonClicked` flag pattern from Day 3 — camera first, then peer creation:
+
+```javascript
+let buttonClicked = false;
+
+socket.on('peer-joined', (id) => {
+    desktopId = id;
+    if (buttonClicked) createPeer(true, desktopId); // camera already ready
+});
+
+// button click: get camera FIRST, then create peer
+myStream = await navigator.mediaDevices.getUserMedia({ video: true });
+buttonClicked = true;
+if (desktopId) createPeer(true, desktopId);
+```
+
+---
+
+## Part 2 — Mobile Button Not Visible on iPhone
+
+### The Problem
+
+Every time `mobile.html` was regenerated, the Enter Circle button disappeared off the bottom of the iPhone screen. The large `h1` title pushed it below the viewport.
+
+### What AI Tried
+
+Kept changing individual properties — font-size from 3.5rem to 2.5rem, removing `margin-bottom` from the `p` tag. These were partial fixes that kept breaking when the file was regenerated.
+
+### My Fix
+
+Changed `#intro-ui` to use flexbox with `gap` instead of margins. This keeps everything centred and visible regardless of font size:
+
+```css
+#intro-ui {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;    /* replaces all margin-bottom hacks */
+    padding: 20px;
+}
+p { margin: 0; }
+```
+
+---
+
+## Part 3 — Letter Detection Feature
+
+### What AI Gave Me
+
+AI gave me a `checkLetterHover()` function that runs every animation frame and checks if the planchette centre overlaps any letter element using `getBoundingClientRect()`:
+
+```javascript
+function checkLetterHover() {
+    const px = currentX + 125; // centre of planchette
+    const py = currentY + 40;  // near top hole of planchette
+    let found = null;
+
+    document.querySelectorAll('.board-letter, .board-word').forEach(el => {
+        const r = el.getBoundingClientRect();
+        if (px >= r.left - 8 && px <= r.right + 8 &&
+            py >= r.top - 8 && py <= r.bottom + 8) {
+            found = el.dataset.letter;
+        }
+    });
+
+    if (found !== currentActiveLetter) {
+        document.querySelectorAll('.board-letter, .board-word')
+            .forEach(el => el.classList.remove('active'));
+        if (found) {
+            document.querySelector(`[data-letter="${found}"]`).classList.add('active');
+            if (peer && peer.connected) {
+                peer.send(JSON.stringify({ type: 'letter', value: found }));
+            }
+        }
+        currentActiveLetter = found;
+    }
+}
+```
+
+AI also rewrote the board to use individual spans (instead of plain text paragraphs) so `getBoundingClientRect()` can target each letter:
+
+```javascript
+document.querySelectorAll('.board-content p').forEach(row => {
+    const words = row.textContent.trim().split(/\s+/);
+    row.innerHTML = '';
+    words.forEach(word => {
+        const span = document.createElement('span');
+        span.dataset.letter = word;
+        span.className = word.length === 1 ? 'board-letter' : 'board-word';
+        span.style.margin = '0 8px';
+        row.appendChild(span);
+    });
+});
+```
+
+### What I Changed
+
+The letter glow CSS needed fixing — inactive letters were still showing through at 0.4 opacity from the parent `.board-content`. I added `!important` and a gold text-shadow to the active state:
+
+```css
+.board-letter.active {
+    opacity: 1 !important;
+    color: #fff8dc;
+    text-shadow: 0 0 10px rgba(255,220,100,0.9),
+                 0 0 28px rgba(255,180,0,0.6);
+    transform: scale(1.3);
+}
+```
+
+---
+
+## Part 4 — Phone Feedback When Letter Hit
+
+### Vibration (iOS Does Not Support This)
+
+AI added `navigator.vibrate(120)` to mobile.js. This works on Android but iOS Safari completely blocks the Vibration API — Apple only allows haptics in native apps. There is no workaround for web.
+
+### Letter Display on Phone
+
+AI gave me a letter display element above the planchette. When desktop sends a letter over the WebRTC data channel, phone shows it in large text with a pop animation:
+
+```javascript
+peer.on('data', data => {
+    const msg = JSON.parse(data);
+    if (msg.type === 'letter') {
+        const display = document.querySelector('#letter-display');
+        display.textContent = msg.value;
+        display.classList.remove('pop');
+        void display.offsetWidth; // force reflow to restart animation
+        display.classList.add('pop');
+    }
+});
+```
+
+### Screen Flash (My Addition for iOS)
+
+Since vibration doesn't work on iOS for now I added a full-screen gold flash instead. Every time a letter is hit the whole phone screen briefly flashes gold — more noticeable than a subtle text change:
+
+```javascript
+const flash = document.createElement('div');
+flash.style.cssText = `
+    position: fixed;
+    inset: 0;
+    background: rgba(212,175,55,0.18);
+    pointer-events: none;
+    z-index: 9999;
+    animation: flashFade 0.35s ease-out forwards;
+`;
+document.body.appendChild(flash);
+setTimeout(() => flash.remove(), 350);
+```
+
+---
+
