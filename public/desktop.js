@@ -8,6 +8,35 @@ let currentY = targetY;
 const friction = 0.02;
 let peer;
 let ghostImage = null;
+
+// --- Wood drag sound ---
+let audioCtx = null;
+let scrapeSource = null;
+let scrapeGain = null;
+
+function initAudio() {
+    if (audioCtx) return;
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    fetch('/assets/wood_scrape.mp3')
+        .then(r => r.arrayBuffer())
+        .then(buf => audioCtx.decodeAudioData(buf))
+        .then(decoded => {
+            scrapeSource = audioCtx.createBufferSource();
+            scrapeSource.buffer = decoded;
+            scrapeSource.loop = true;
+
+            scrapeGain = audioCtx.createGain();
+            scrapeGain.gain.value = 0;
+
+            scrapeSource.connect(scrapeGain);
+            scrapeGain.connect(audioCtx.destination);
+            scrapeSource.start();
+        });
+}
+
+document.addEventListener('click', initAudio, { once: true });
+
 let ghostCooldown = false;
 
 socket.on('connect', () => {
@@ -222,6 +251,7 @@ function checkLetterHover() {
         currentActiveLetter = found;
     }
 }
+
 
 function animate() {
     currentX += (targetX - currentX) * friction;
