@@ -917,3 +917,207 @@ peer.on('data', data => {
 
 ---
 
+# Dev Diary (March 9, 2026)
+## Letter Detection + Phone Feedback — AI Usage & What I Actually Changed
+
+---
+
+## What I Was Trying to Build Today
+
+Coming in, the core tilting mechanic worked. Today's goals:
+
+- Map the Ouija board letters so the planchette detects when it's over a letter (A–Z, YES, NO)
+- When a letter is hit, glow it on the desktop and send a signal back to the phone
+- Phone gives feedback when a letter is selected
+- Fix a regression — the motion had broken again and needed debugging back to a working state
+
+---
+
+## Part 1 — Debugging: Motion Broke Again
+
+### The Problem
+
+Desktop showed `CONNECTED` and `Ghost+face composite ready!` but zero motion. Same symptom as a bug from Day 3.
+
+### What AI Tried (Did Not Work)
+
+- Adding `data.toString()` to the JSON.parse call
+- Adding a `motion.x !== undefined` check
+- Adding a `readyToSend` delay flag in mobile.js (made it worse, had to revert)
+
+### Root Cause I Found
+
+Looking at the console I saw this error:
+
+```
+peer error OperationError: User-Initiated Abort, reason=Close called
+```
+
+AI had re-introduced a `peer.destroy()` block when helping with a different problem. It was killing the working peer right after connection:
+
+```javascript
+// THIS WAS KILLING THE CONNECTION
+if (peer && myStream) {
+    peer.destroy();   // destroys the working peer
+    peer = null;
+    createPeer(true, desktopId);  // creates a new broken one
+}
+```
+
+### My Fix
+
+Removed the entire destroy block. Reverted to the simple `buttonClicked` flag pattern from Day 3 — camera first, then peer creation:
+
+```javascript
+let buttonClicked = false;
+
+socket.on('peer-joined', (id) => {
+    desktopId = id;
+    if (buttonClicked) createPeer(true, desktopId); // camera already ready
+});
+
+// button click: get camera FIRST, then create peer
+myStream = await navigator.mediaDevices.getUserMedia({ video: true });
+buttonClicked = true;
+if (desktopId) createPeer(true, desktopId);
+```
+
+---
+
+## Part 2 — Mobile Button Not Visible on iPhone
+
+### The Problem
+
+Every time `mobile.html` was regenerated, the Enter Circle button disappeared off the bottom of the iPhone screen. The large `h1` title pushed it below the viewport.
+
+### What AI Tried
+
+Kept changing individual properties — font-size from 3.5rem to 2.5rem, removing `margin-bottom` from the `p` tag. These were partial fixes that kept breaking when the file was regenerated.
+
+### My Fix
+
+Changed `#intro-ui` to use flexbox with `gap` instead of margins. This keeps everything centred and visible regardless of font size:
+
+```css
+#intro-ui {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;    /* replaces all margin-bottom hacks */
+    padding: 20px;
+}
+p { margin: 0; }
+```
+
+---
+
+## Part 3 — Letter Detection Feature
+
+### What AI Gave Me
+
+AI gave me a `checkLetterHover()` function that runs every animation frame and checks if the planchette centre overlaps any letter element using `getBoundingClientRect()`:
+
+```javascript
+function checkLetterHover() {
+    const px = currentX + 125; // centre of planchette
+    const py = currentY + 40;  // near top hole of planchette
+    let found = null;
+
+    document.querySelectorAll('.board-letter, .board-word').forEach(el => {
+        const r = el.getBoundingClientRect();
+        if (px >= r.left - 8 && px <= r.right + 8 &&
+            py >= r.top - 8 && py <= r.bottom + 8) {
+            found = el.dataset.letter;
+        }
+    });
+
+    if (found !== currentActiveLetter) {
+        document.querySelectorAll('.board-letter, .board-word')
+            .forEach(el => el.classList.remove('active'));
+        if (found) {
+            document.querySelector(`[data-letter="${found}"]`).classList.add('active');
+            if (peer && peer.connected) {
+                peer.send(JSON.stringify({ type: 'letter', value: found }));
+            }
+        }
+        currentActiveLetter = found;
+    }
+}
+```
+
+AI also rewrote the board to use individual spans (instead of plain text paragraphs) so `getBoundingClientRect()` can target each letter:
+
+```javascript
+document.querySelectorAll('.board-content p').forEach(row => {
+    const words = row.textContent.trim().split(/\s+/);
+    row.innerHTML = '';
+    words.forEach(word => {
+        const span = document.createElement('span');
+        span.dataset.letter = word;
+        span.className = word.length === 1 ? 'board-letter' : 'board-word';
+        span.style.margin = '0 8px';
+        row.appendChild(span);
+    });
+});
+```
+
+### What I Changed
+
+The letter glow CSS needed fixing — inactive letters were still showing through at 0.4 opacity from the parent `.board-content`. I added `!important` and a gold text-shadow to the active state:
+
+```css
+.board-letter.active {
+    opacity: 1 !important;
+    color: #fff8dc;
+    text-shadow: 0 0 10px rgba(255,220,100,0.9),
+                 0 0 28px rgba(255,180,0,0.6);
+    transform: scale(1.3);
+}
+```
+
+---
+
+## Part 4 — Phone Feedback When Letter Hit
+
+### Vibration (iOS Does Not Support This)
+
+AI added `navigator.vibrate(120)` to mobile.js. This works on Android but iOS Safari completely blocks the Vibration API — Apple only allows haptics in native apps. There is no workaround for web.
+
+### Letter Display on Phone
+
+AI gave me a letter display element above the planchette. When desktop sends a letter over the WebRTC data channel, phone shows it in large text with a pop animation:
+
+```javascript
+peer.on('data', data => {
+    const msg = JSON.parse(data);
+    if (msg.type === 'letter') {
+        const display = document.querySelector('#letter-display');
+        display.textContent = msg.value;
+        display.classList.remove('pop');
+        void display.offsetWidth; // force reflow to restart animation
+        display.classList.add('pop');
+    }
+});
+```
+
+### Screen Flash (My Addition for iOS)
+
+Since vibration doesn't work on iOS for now I added a full-screen gold flash instead. Every time a letter is hit the whole phone screen briefly flashes gold — more noticeable than a subtle text change:
+
+```javascript
+const flash = document.createElement('div');
+flash.style.cssText = `
+    position: fixed;
+    inset: 0;
+    background: rgba(212,175,55,0.18);
+    pointer-events: none;
+    z-index: 9999;
+    animation: flashFade 0.35s ease-out forwards;
+`;
+document.body.appendChild(flash);
+setTimeout(() => flash.remove(), 350);
+```
+
+---
+
