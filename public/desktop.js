@@ -28,9 +28,7 @@ socket.on('signal', (myId, signal, peerId) => {
 
 const createPeer = (initiator, peerId) => {
     peer = new SimplePeer({
-        initiator,
-        trickle: true,
-        config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
+        initiator
     });
 
     peer.on('stream', stream => {
