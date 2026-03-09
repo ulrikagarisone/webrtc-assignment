@@ -9,6 +9,34 @@ const friction = 0.02;
 let peer;
 let ghostImage = null;
 
+// --- Possession Mode ---
+let possessed = false;
+let possessionInterval = null;
+
+function triggerPossession() {
+    if (possessed) return;
+    possessed = true;
+
+    // Flash screen red
+    const flash = document.createElement('div');
+    flash.style.cssText = 'position:fixed;inset:0;background:rgba(120,0,0,0.3);pointer-events:none;z-index:998;transition:opacity 1.5s;';
+    document.body.appendChild(flash);
+    setTimeout(() => { flash.style.opacity = '0'; setTimeout(() => flash.remove(), 1500); }, 300);
+
+    // Move creepily on its own for 6 seconds
+    let elapsed = 0;
+    possessionInterval = setInterval(() => {
+        elapsed += 500;
+        // Pick random position on screen
+        targetX = Math.random() * (window.innerWidth - 250);
+        targetY = Math.random() * (window.innerHeight - 250);
+        if (elapsed >= 6000) {
+            clearInterval(possessionInterval);
+            possessed = false;
+        }
+    }, 500);
+}
+
 // --- Wood drag sound ---
 let audioCtx = null;
 let scrapeSource = null;
@@ -35,7 +63,18 @@ function initAudio() {
         });
 }
 
-document.addEventListener('click', initAudio, { once: true });
+// Show click-to-start overlay once peer connects
+function showAudioPrompt() {
+    const overlay = document.createElement('div');
+    overlay.id = 'audio-prompt';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;cursor:pointer;display:flex;align-items:center;justify-content:center;';
+    overlay.innerHTML = '<div style="color:#d4af37;font-family:Garamond,serif;font-size:1.2rem;letter-spacing:0.2em;opacity:0.6;">CLICK TO BEGIN</div>';
+    overlay.addEventListener('click', () => {
+        initAudio();
+        overlay.remove();
+    }, { once: true });
+    document.body.appendChild(overlay);
+}
 
 let ghostCooldown = false;
 
@@ -78,13 +117,16 @@ const createPeer = (initiator, peerId) => {
     peer.on('connect', () => {
         console.log('CONNECTED!');
         document.querySelector('#qr-canvas').style.display = 'none';
+        showAudioPrompt();
     });
 
     peer.on('data', data => {
         try {
             const motion = JSON.parse(data);
-            targetX += motion.x * 2.5;
-            targetY += motion.y * 2.5;
+            if (!possessed) {
+                targetX += motion.x * 2.5;
+                targetY += motion.y * 2.5;
+            }
             targetX = Math.max(0, Math.min(window.innerWidth - 250, targetX));
             targetY = Math.max(0, Math.min(window.innerHeight - 250, targetY));
 
@@ -245,6 +287,8 @@ function checkLetterHover() {
             document.querySelector(`[data-letter="${found}"]`).classList.add('active');
             if (peer && peer.connected) {
                 peer.send(JSON.stringify({ type: 'letter', value: found }));
+                // Hovering NO triggers possession
+                if (found === 'NO') triggerPossession();
             }
             console.log('Letter:', found);
         }
