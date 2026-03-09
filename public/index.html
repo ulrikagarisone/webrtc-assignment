@@ -41,6 +41,7 @@
             z-index: 100;
             cursor: none;
             filter: drop-shadow(0 10px 20px rgba(0, 0, 0, 0.8));
+            pointer-events: none;
         }
 
         #planchette img {
@@ -133,9 +134,7 @@
         <img src="/assets/heart_teller.png" alt="planchette">
     </div>
     <div id="ghost-container">
-        <div id="ghost-face-img">
-            <img src="/assets/ghost.png" alt="ghost-face">
-        </div>
+        <div id="ghost-face-img"></div>
     </div>
     <video id="otherCamera" playsinline autoplay muted></video>
     <script src="/socket.io/socket.io.js"></script>

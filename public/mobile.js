@@ -63,7 +63,16 @@ if (roomId) {
     document.querySelector('#start').addEventListener('click', async () => {
         document.querySelector('#start').style.display = 'none';
 
-        // Get camera FIRST before anything else
+        // Motion permission MUST be first — iOS loses gesture context after any await
+        if (typeof DeviceOrientationEvent !== 'undefined' &&
+            typeof DeviceOrientationEvent.requestPermission === 'function') {
+            try {
+                const state = await DeviceOrientationEvent.requestPermission();
+                if (state !== 'granted') { alert('Motion permission denied!'); return; }
+            } catch (e) { console.log('motion permission error', e); }
+        }
+
+        // Now get camera
         try {
             myStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
             console.log('Camera ready!');
@@ -73,22 +82,10 @@ if (roomId) {
         }
 
         buttonClicked = true;
-
-        // Now create peer with stream attached
         if (desktopId) createPeer(true, desktopId);
 
-        // Request motion permission (iOS)
-        if (typeof DeviceOrientationEvent !== 'undefined' &&
-            typeof DeviceOrientationEvent.requestPermission === 'function') {
-            DeviceOrientationEvent.requestPermission()
-                .then(state => {
-                    if (state === 'granted') { showPlanchetteUI(); startMoving(); }
-                    else { alert('Permission denied!'); }
-                }).catch(console.error);
-        } else {
-            showPlanchetteUI();
-            startMoving();
-        }
+        showPlanchetteUI();
+        startMoving();
     });
 
     function showPlanchetteUI() {
