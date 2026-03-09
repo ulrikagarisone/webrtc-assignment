@@ -164,6 +164,67 @@ function hauntScreen() {
     }, 3500);
 }
 
+// ── Letter detection ──────────────────────────────────────────
+let currentActiveLetter = null;
+
+// inject glow style
+const glowStyle = document.createElement('style');
+glowStyle.textContent = `
+    .board-letter, .board-word {
+        display: inline-block;
+        transition: opacity 0.12s, text-shadow 0.12s, transform 0.12s;
+    }
+    .board-letter.active, .board-word.active {
+        opacity: 1 !important;
+        color: #fff8dc;
+        text-shadow: 0 0 10px rgba(255,220,100,0.9), 0 0 28px rgba(255,180,0,0.6);
+        transform: scale(1.3);
+    }
+`;
+document.head.appendChild(glowStyle);
+
+// give every letter/word a data-letter attribute for detection
+document.querySelectorAll('.board-content p').forEach(row => {
+    const text = row.textContent.trim();
+    // replace each row's text with individual spans
+    const words = text.split(/\s+/).filter(w => w.length > 0);
+    row.innerHTML = '';
+    words.forEach(word => {
+        const span = document.createElement('span');
+        span.textContent = word;
+        span.dataset.letter = word;
+        span.className = word.length === 1 ? 'board-letter' : 'board-word';
+        span.style.margin = '0 8px';
+        row.appendChild(span);
+    });
+});
+
+function checkLetterHover() {
+    const px = currentX + 125; // horizontal center of planchette
+    const py = currentY + 40;  // near top hole of planchette image
+    let found = null;
+
+    document.querySelectorAll('.board-letter, .board-word').forEach(el => {
+        const r = el.getBoundingClientRect();
+        if (px >= r.left - 8 && px <= r.right + 8 &&
+            py >= r.top - 8 && py <= r.bottom + 8) {
+            found = el.dataset.letter;
+        }
+    });
+
+    if (found !== currentActiveLetter) {
+        document.querySelectorAll('.board-letter, .board-word').forEach(el => el.classList.remove('active'));
+        if (found) {
+            document.querySelector(`[data-letter="${found}"]`).classList.add('active');
+            if (peer && peer.connected) {
+                peer.send(JSON.stringify({ type: 'letter', value: found }));
+            }
+            console.log('Letter:', found);
+        }
+        currentActiveLetter = found;
+    }
+}
+
 function animate() {
     currentX += (targetX - currentX) * friction;
     currentY += (targetY - currentY) * friction;
@@ -172,6 +233,7 @@ function animate() {
         planchette.style.left = `${currentX}px`;
         planchette.style.top = `${currentY}px`;
     }
+    checkLetterHover();
     requestAnimationFrame(animate);
 }
 animate();
