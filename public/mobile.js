@@ -36,6 +36,21 @@ if (roomId) {
             console.log('CONNECTED!');
             if (navigator.vibrate) navigator.vibrate(200);
         });
+        peer.on('data', data => {
+            try {
+                const msg = JSON.parse(data);
+                if (msg.type === 'letter') {
+                    if (navigator.vibrate) navigator.vibrate(120);
+                    const display = document.querySelector('#letter-display');
+                    if (display) {
+                        display.textContent = msg.value;
+                        display.classList.remove('pop');
+                        void display.offsetWidth;
+                        display.classList.add('pop');
+                    }
+                }
+            } catch (e) { }
+        });
         peer.on('close', () => { peer = null; });
         peer.on('error', (e) => console.log('error', e));
     };

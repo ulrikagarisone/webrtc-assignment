@@ -95,6 +95,36 @@
             transition: opacity 1s ease;
         }
 
+        #letter-display {
+            font-size: 7rem;
+            min-height: 100px;
+            color: #d4af37;
+            text-shadow: 0 0 20px rgba(212, 175, 55, 0.3);
+            letter-spacing: 4px;
+        }
+
+        #letter-display.pop {
+            animation: letterPop 0.4s ease-out forwards;
+        }
+
+        @keyframes letterPop {
+            0% {
+                transform: scale(1);
+                color: #d4af37;
+            }
+
+            40% {
+                transform: scale(1.7);
+                color: #fff8dc;
+                text-shadow: 0 0 40px rgba(255, 220, 100, 0.9);
+            }
+
+            100% {
+                transform: scale(1.1);
+                color: #d4af37;
+            }
+        }
+
         .instruction {
             margin-top: 10px;
             font-size: 1.25rem;
@@ -124,6 +154,7 @@
         <button id="start">Enter Circle</button>
     </div>
     <div id="planchette-ui">
+        <div id="letter-display"></div>
         <img src="/assets/heart_teller.png" id="planchette-img" alt="Planchette">
         <p class="instruction">TILT TO GUIDE THE SPIRITS</p>
     </div>
