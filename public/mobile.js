@@ -48,6 +48,11 @@ if (roomId) {
                         void display.offsetWidth;
                         display.classList.add('pop');
                     }
+                    // full screen flash for iOS (no vibration support)
+                    const flash = document.createElement('div');
+                    flash.style.cssText = 'position:fixed;inset:0;background:rgba(212,175,55,0.18);pointer-events:none;z-index:9999;animation:flashFade 0.35s ease-out forwards;';
+                    document.body.appendChild(flash);
+                    setTimeout(() => flash.remove(), 350);
                 }
             } catch (e) { }
         });
