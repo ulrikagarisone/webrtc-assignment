@@ -120,27 +120,25 @@
         @keyframes letterPop {
             0% {
                 transform: scale(1);
-                color: #d4af37;
+                opacity: 0;
             }
 
-            40% {
-                transform: scale(1.7);
-                color: #fff8dc;
-                text-shadow: 0 0 40px rgba(255, 220, 100, 0.9);
+            50% {
+                transform: scale(1.5);
+                opacity: 1;
             }
 
             100% {
-                transform: scale(1.1);
-                color: #d4af37;
+                transform: scale(1);
+                opacity: 1;
             }
         }
-
         .instruction {
-            margin-top: 10px;
-            font-size: 1.25rem;
-            letter-spacing: 1px;
-            color: #d4af37;
-            animation: pulse 2s infinite;
+        margin-top: 10px;
+        font-size: 1.25rem;
+        letter-spacing: 1px;
+        color: #d4af37;
+        animation: pulse 2s infinite;
         }
 
         @keyframes pulse {
