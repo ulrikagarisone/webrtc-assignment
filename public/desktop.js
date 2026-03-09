@@ -252,10 +252,23 @@ function checkLetterHover() {
     }
 }
 
+let prevX = currentX;
+let prevY = currentY;
 
 function animate() {
     currentX += (targetX - currentX) * friction;
     currentY += (targetY - currentY) * friction;
+
+    // Velocity-linked wood scrape sound
+    const vx = currentX - prevX;
+    const vy = currentY - prevY;
+    const speed = Math.sqrt(vx * vx + vy * vy);
+    prevX = currentX;
+    prevY = currentY;
+    if (scrapeGain && audioCtx) {
+        const targetVol = Math.min(speed * 0.12, 0.9);
+        scrapeGain.gain.setTargetAtTime(targetVol, audioCtx.currentTime, 0.05);
+    }
     const planchette = document.querySelector('#planchette');
     if (planchette) {
         planchette.style.left = `${currentX}px`;
