@@ -7,17 +7,17 @@ let currentX = targetX;
 let currentY = targetY;
 const friction = 0.02;
 let peer;
+let ghostImage = null;
+let ghostCooldown = false;
 
 socket.on('connect', () => {
     console.log('Desktop connected:', socket.id);
     socket.emit('join', roomId);
     const url = `${window.location.protocol}//${window.location.host}/mobile.html?room=${roomId}`;
-    QRCode.toCanvas(document.getElementById('qr-canvas'), url);
+    QRCode.toCanvas(document.querySelector('#qr-canvas'), url);
 });
 
-// exactly like teacher's receiver.html — wait for signal, not peer-joined
 socket.on('signal', (myId, signal, peerId) => {
-    console.log('Desktop received signal from', peerId);
     if (peer) {
         peer.signal(signal);
     } else if (signal.type === 'offer') {
@@ -33,13 +33,24 @@ const createPeer = (initiator, peerId) => {
         config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
     });
 
-    peer.on('signal', data => {
-        socket.emit('signal', peerId, data);
+    peer.on('stream', stream => {
+        console.log('Stream received!');
+        const $video = document.querySelector('#otherCamera');
+        $video.srcObject = stream;
+        $video.onloadedmetadata = () => {
+            $video.play();
+            // Try snapshot a few times to make sure video is ready
+            setTimeout(() => trySnapshot(), 1500);
+            setTimeout(() => trySnapshot(), 3000);
+            setTimeout(() => trySnapshot(), 5000);
+        };
     });
+
+    peer.on('signal', data => { socket.emit('signal', peerId, data); });
 
     peer.on('connect', () => {
         console.log('CONNECTED!');
-        document.getElementById('qr-canvas').style.display = 'none';
+        document.querySelector('#qr-canvas').style.display = 'none';
     });
 
     peer.on('data', data => {
@@ -49,23 +60,114 @@ const createPeer = (initiator, peerId) => {
             targetY += motion.y * 2.5;
             targetX = Math.max(0, Math.min(window.innerWidth - 250, targetX));
             targetY = Math.max(0, Math.min(window.innerHeight - 250, targetY));
+
+            const intensity = Math.abs(motion.x) + Math.abs(motion.y);
+            if (!ghostImage) trySnapshot();
+            if (intensity > 60) hauntScreen();
         } catch (e) { }
     });
 
-    peer.on('close', () => {
-        console.log('closed');
-        peer = null;
-    });
-
-    peer.on('error', () => {
-        console.log('error');
-    });
+    peer.on('close', () => { peer = null; });
+    peer.on('error', (e) => console.log('peer error', e));
 };
+
+// Pre-load ghost sheet image from assets
+const ghostSheet = new Image();
+ghostSheet.src = '/assets/ghost.png';
+ghostSheet.onload = () => console.log('Ghost sheet loaded');
+
+function trySnapshot() {
+    if (ghostImage) return;
+    const $video = document.querySelector('#otherCamera');
+    if (!$video.srcObject || $video.videoWidth === 0) return;
+    buildGhostImage($video);
+}
+
+function buildGhostImage($video) {
+    const W = 300, H = 428;
+    const canvas = document.createElement('canvas');
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext('2d');
+
+    // Draw ghost sheet as base
+    if (ghostSheet.complete && ghostSheet.naturalWidth > 0) {
+        ctx.drawImage(ghostSheet, 0, 0, W, H);
+    }
+
+    // Clip face into the oval hole on the ghost
+    const faceCX = W * 0.50;
+    const faceCY = H * 0.168;
+    const faceRX = 52;
+    const faceRY = 58;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(faceCX, faceCY, faceRX, faceRY, 0, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.filter = 'grayscale(0.8) brightness(1.0) contrast(1.1)';
+    const drawSize = faceRX * 2;
+    ctx.drawImage($video, faceCX - drawSize / 2, faceCY - drawSize / 2, drawSize, drawSize);
+    ctx.restore();
+
+    // Ghost sheet again at low opacity on top for veil effect
+    ctx.globalAlpha = 0.25;
+    if (ghostSheet.complete && ghostSheet.naturalWidth > 0) {
+        ctx.drawImage(ghostSheet, 0, 0, W, H);
+    }
+    ctx.globalAlpha = 1;
+
+    ghostImage = canvas.toDataURL('image/png');
+    console.log('Ghost+face composite ready!');
+}
+
+function hauntScreen() {
+    if (ghostCooldown || !ghostImage) return;
+
+    const $ghost = document.querySelector('#ghost-container');
+    const $faceImg = document.querySelector('#ghost-face-img');
+    $faceImg.style.backgroundImage = `url(${ghostImage})`;
+
+    const startX = Math.random() > 0.5 ? -320 : window.innerWidth + 50;
+    const startY = 60 + Math.random() * (window.innerHeight * 0.5);
+    const endX = startX < 0 ? window.innerWidth + 320 : -320;
+    const endY = startY - 120;
+
+    $ghost.style.transition = 'none';
+    $ghost.style.left = startX + 'px';
+    $ghost.style.top = startY + 'px';
+    $ghost.style.opacity = '1';
+
+    setTimeout(() => {
+        $ghost.style.transition = 'left 3.5s ease-in-out, top 3.5s ease-in-out';
+        $ghost.style.left = endX + 'px';
+        $ghost.style.top = endY + 'px';
+    }, 50);
+
+    const smokeInterval = setInterval(() => {
+        const smoke = document.createElement('div');
+        smoke.classList.add('smoke');
+        const size = 50 + Math.random() * 70;
+        smoke.style.width = size + 'px';
+        smoke.style.height = size + 'px';
+        smoke.style.left = (parseFloat($ghost.style.left) + 120) + 'px';
+        smoke.style.top = (parseFloat($ghost.style.top) + 250) + 'px';
+        document.body.appendChild(smoke);
+        setTimeout(() => smoke.remove(), 1800);
+    }, 160);
+
+    ghostCooldown = true;
+    setTimeout(() => {
+        $ghost.style.opacity = '0';
+        clearInterval(smokeInterval);
+        setTimeout(() => { ghostCooldown = false; }, 500);
+    }, 3500);
+}
 
 function animate() {
     currentX += (targetX - currentX) * friction;
     currentY += (targetY - currentY) * friction;
-    const planchette = document.getElementById('planchette');
+    const planchette = document.querySelector('#planchette');
     if (planchette) {
         planchette.style.left = `${currentX}px`;
         planchette.style.top = `${currentY}px`;

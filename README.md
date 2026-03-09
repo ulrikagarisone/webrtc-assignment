@@ -700,3 +700,220 @@ const createPeer = (initiator, peerId) => {
 
 ---
 
+# Dev Diary — Day 3 (March 7, 2026)
+## Ghost Camera Feature 
+
+---
+
+## What I Was Trying to Build
+
+I wanted to add a bonus feature: when you tilt the phone hard enough, a ghost appears on the desktop screen and flies across it. The twist — the ghost would show **your actual face** from the phone's front camera, composited onto a ghost image. Spooky and personal.
+
+---
+
+## Part 1 — Switching Back to WebRTC (for the Camera Stream)
+
+The project had previously been simplified to a Socket.io relay for motion data (no WebRTC). But to send a **live camera stream** from phone to desktop, I needed WebRTC back — Socket.io can't carry video.
+
+I asked AI to help re-introduce SimplePeer alongside the existing Socket.io signalling. The key architectural decision: **Socket.io stays for signalling only, SimplePeer handles the camera stream and motion data**.
+
+**AI gave me this signalling pattern:**
+```javascript
+// server.js
+socket.on('signal', (peerId, signal) => {
+    io.to(peerId).emit('signal', peerId, signal, socket.id);
+});
+
+// desktop.js — wait for an offer before creating peer
+socket.on('signal', (myId, signal, peerId) => {
+    if (peer) {
+        peer.signal(signal);
+    } else if (signal.type === 'offer') {
+        createPeer(false, peerId);
+        peer.signal(signal);
+    }
+});
+```
+
+**The bug I had to fix myself:**
+
+Mobile was sending signals to `roomId` (a random string like `"q6601qq3y"`) instead of the desktop's actual `socket.id`. The peer connection was going nowhere.
+
+```javascript
+// BROKEN — sending signal to room name, not socket id
+socket.emit('signal', roomId, data);
+
+// FIXED — server tells phone the desktop's real socket.id
+socket.on('peer-joined', (desktopSocketId) => {
+    desktopId = desktopSocketId;
+    createPeer(true, desktopId); // now signals go to the right place
+});
+```
+
+On the server side I added one line to send the desktop's real id to the phone:
+```javascript
+socket.on('join', (roomId) => {
+    socket.join(roomId);
+    const room = io.sockets.adapter.rooms.get(roomId);
+    if (room && room.size === 2) {
+        const desktopId = [...room][0];
+        socket.emit('peer-joined', desktopId); // tell phone who to signal
+    }
+});
+```
+
+---
+
+## Part 2 — The Ghost Trigger (`hauntScreen`)
+
+AI suggested triggering the ghost when motion **intensity** (the combined tilt of both axes) crossed a threshold.
+
+**AI gave me this:**
+```javascript
+const intensity = Math.abs(motion.x) + Math.abs(motion.y);
+if (intensity > 25) {
+    hauntScreen();
+}
+```
+
+**Problem:** The threshold of 25 was way too low. Just holding the phone at a slight angle would constantly trigger the ghost. I debugged it by adding console logs to see real values:
+
+```javascript
+console.log('intensity:', intensity.toFixed(1), '| ghostImage:', !!ghostImage);
+```
+
+Watching the actual numbers, I saw normal holding was already around 40–50, so I changed the threshold to `> 60`. That way you have to **actually tilt it hard** to trigger the ghost.
+
+I also added a `ghostCooldown` boolean so the ghost can't spam-trigger while you're holding the phone sideways, and a retry loop in `takeSnapshot()` because AI's original version would silently fail if the video wasn't ready yet:
+
+```javascript
+// AI version — silent fail if video not ready
+function takeSnapshot() {
+    const canvas = document.createElement('canvas');
+    ctx.drawImage($video, 0, 0);
+    ghostImage = canvas.toDataURL('image/png');
+}
+
+// My version — keeps retrying
+function takeSnapshot() {
+    if ($video.videoWidth === 0) {
+        setTimeout(takeSnapshot, 1000); // retry
+        return;
+    }
+    // ... draw to canvas
+}
+```
+
+---
+
+## Part 3 — The Race Condition Bug (Camera Not Arriving)
+
+The trickiest bug of the day. `ghostImage` was always `false` even though the peer connection was working and motion data was flowing.
+
+**Root cause:** A race condition between two things that needed to happen before the peer could be created with a camera stream:
+1. Desktop sends its socket.id to phone (`peer-joined` event)
+2. User clicks the button → camera permission requested → stream ready
+
+If `peer-joined` arrived **before** the button was clicked (which it always did, sockets are fast), the phone would store `desktopId` but `myStream` was still null. Then when the button was clicked and the camera loaded, `createPeer` was called — but the peer was created with `stream: null` so no video was ever sent.
+
+**AI's attempt** used `async/await` inside a socket event which was messy. I rewrote it with a simple `buttonClicked` flag:
+
+```javascript
+// My solution — two flags, whoever arrives last connects
+let buttonClicked = false;
+
+socket.on('peer-joined', (id) => {
+    desktopId = id;
+    if (buttonClicked) createPeer(true, desktopId); // camera already ready
+});
+
+startBtn.addEventListener('click', async () => {
+    myStream = await navigator.mediaDevices.getUserMedia({ video: true });
+    buttonClicked = true;
+    if (desktopId) createPeer(true, desktopId); // desktop already ready
+});
+```
+
+Whichever arrives last (camera OR desktop id) is the one that calls `createPeer`, guaranteeing both are ready.
+
+---
+
+## Part 4 — Ghost Visual Design
+
+**First attempt (AI suggestion):** Show the face in a circle with `border-radius: 50%`. I didn't like it — looked like a profile picture floating on screen, not a ghost.
+
+**Second attempt (AI suggestion):** Use CSS `border-radius: 50% 50% 30% 30%` to make a ghost body shape, with a floating CSS animation. Better but still not what I wanted.
+
+**What I actually wanted:** A real photo of a ghost (like a sheet ghost) with my face composited onto the face area, flying across the screen.
+
+I uploaded a ghost photo and AI helped remove the background using Python/Pillow to make it transparent:
+
+```python
+brightness = (r + g + b) / 3
+is_dark = brightness < 130
+is_orange = (r > 150) & (g < 120) & (b < 80)  # removes pumpkin
+alpha = np.where(is_dark | is_orange, 0, np.clip((brightness - 100) * 2, 0, 255))
+```
+
+**Compositing order I figured out myself:**
+
+AI originally put the face *behind* the ghost sheet at very low opacity — you couldn't see it at all. I switched the order:
+
+```javascript
+// LAYER 1: ghost sheet as base
+ctx.drawImage(ghostSheet, 0, 0, W, H);
+
+// LAYER 2: face ON TOP, clipped to face-hole oval — full brightness
+ctx.save();
+ctx.beginPath();
+ctx.ellipse(faceCX, faceCY, faceRX, faceRY, 0, 0, Math.PI * 2);
+ctx.clip();
+ctx.filter = 'grayscale(0.8) brightness(1.0) contrast(1.15)';
+ctx.drawImage($video, ...);
+ctx.restore();
+
+// LAYER 3: ghost sheet again at 25% — subtle veil so face looks inside the ghost
+ctx.globalAlpha = 0.25;
+ctx.drawImage(ghostSheet, 0, 0, W, H);
+```
+
+This gives the effect of the face being inside the ghost rather than just stuck on top of it.
+
+**Size tuning I did manually:**
+
+```javascript
+// AI had this at 2.8 — face was bigger than the ghost head
+const drawSize = faceRX * 2.0; // I changed to 2.0, fits the face hole correctly
+```
+
+---
+
+## Part 5 — Snapshot Timing
+
+Originally the snapshot only happened when the phone was tilted hard (on the `hauntScreen` trigger). So if you never tilted hard enough, you'd never get a ghost face.
+
+I changed it to take the snapshot **immediately** when the stream arrives, with multiple retries:
+
+```javascript
+peer.on('stream', stream => {
+    $video.srcObject = stream;
+    $video.onloadedmetadata = () => {
+        $video.play();
+        // Take it right away, don't wait for tilting
+        setTimeout(() => trySnapshot(), 1500);
+        setTimeout(() => trySnapshot(), 3000);
+        setTimeout(() => trySnapshot(), 5000);
+    };
+});
+```
+
+Also added a retry on every motion packet until the snapshot succeeds:
+```javascript
+peer.on('data', data => {
+    if (!ghostImage) trySnapshot(); // keep trying until we have a face
+    // ...
+});
+```
+
+---
+
