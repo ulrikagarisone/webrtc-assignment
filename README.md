@@ -1157,3 +1157,48 @@ fetch('/assets/wood_scrape.mp3')
 ```
 
 I also increased the max volume from `0.35` to `0.9` since the real recording was quieter than the generated noise, and removed the filter frequency shifting since it's no longer needed with a real sound file.
+
+-------
+
+# Possession Mode
+
+### What I Wanted to Build
+
+I wanted a "Possession Mode" where the board occasionally takes over and moves the planchette on its own. My idea was to trigger it when the planchette hovers over NO — felt more thematic than a random timer. I also wanted a creepy sound to play when it happens.
+
+### What AI Gave Me
+
+AI's first version spelled out scary words letter by letter (BEHIND YOU, HELP ME, GET OUT, RUN) triggered by a random timer every 25-45 seconds. It calculated each letter's position using `getBoundingClientRect()` and moved the planchette to each one with a 1.2 second delay between letters. It also added a red screen flash and a generated eerie drone using two detuned sine wave oscillators through the Web Audio API:
+
+```javascript
+const osc = audioCtx.createOscillator();
+const osc2 = audioCtx.createOscillator();
+osc.frequency.setValueAtTime(55, audioCtx.currentTime);
+osc2.frequency.setValueAtTime(58.5, audioCtx.currentTime); // slight detune
+gainNode.gain.linearRampToValueAtTime(0.3, audioCtx.currentTime + 0.8);
+gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 6);
+```
+
+### What I Changed
+
+**I dropped the spelling entirely.** Spelling specific words would break on different screen sizes since letter positions are pixel-based. Instead I made the planchette move to random positions every 500ms for 6 seconds — simpler, works on any screen, and honestly feels creepier because it's unpredictable:
+
+```javascript
+possessionInterval = setInterval(() => {
+    elapsed += 500;
+    targetX = Math.random() * (window.innerWidth - 250);
+    targetY = Math.random() * (window.innerHeight - 250);
+    if (elapsed >= 6000) {
+        clearInterval(possessionInterval);
+        possessed = false;
+    }
+}, 500);
+```
+
+**I changed the trigger from a timer to hovering over NO.** The random timer felt disconnected from the experience. Hovering over NO to trigger possession makes narrative sense — you're asking the spirits and they answer by taking over. This was my idea:
+
+```javascript
+if (found === 'NO') triggerPossession();
+```
+
+**I replaced the generated drone with a real recorded sound.** I found and downloaded a creepy possession sound and loaded it the same way as the wood scrape — via `fetch()` and `decodeAudioData()`. The real recording is much more atmospheric than synthesized oscillators.

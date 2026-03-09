@@ -23,6 +23,25 @@ function triggerPossession() {
     document.body.appendChild(flash);
     setTimeout(() => { flash.style.opacity = '0'; setTimeout(() => flash.remove(), 1500); }, 300);
 
+    // Eerie possession sound from file
+    if (audioCtx) {
+        fetch('/assets/possesd_sound.mp3')
+            .then(r => r.arrayBuffer())
+            .then(buf => audioCtx.decodeAudioData(buf))
+            .then(decoded => {
+                const source = audioCtx.createBufferSource();
+                const gainNode = audioCtx.createGain();
+                source.buffer = decoded;
+                source.loop = false;
+                gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+                gainNode.gain.linearRampToValueAtTime(0.8, audioCtx.currentTime + 0.5);
+                gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 6);
+                source.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+                source.start();
+            });
+    }
+
     // Move creepily on its own for 6 seconds
     let elapsed = 0;
     possessionInterval = setInterval(() => {
@@ -64,17 +83,7 @@ function initAudio() {
 }
 
 // Show click-to-start overlay once peer connects
-function showAudioPrompt() {
-    const overlay = document.createElement('div');
-    overlay.id = 'audio-prompt';
-    overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;cursor:pointer;display:flex;align-items:center;justify-content:center;';
-    overlay.innerHTML = '<div style="color:#d4af37;font-family:Garamond,serif;font-size:1.2rem;letter-spacing:0.2em;opacity:0.6;">CLICK TO BEGIN</div>';
-    overlay.addEventListener('click', () => {
-        initAudio();
-        overlay.remove();
-    }, { once: true });
-    document.body.appendChild(overlay);
-}
+
 
 let ghostCooldown = false;
 
@@ -117,7 +126,11 @@ const createPeer = (initiator, peerId) => {
     peer.on('connect', () => {
         console.log('CONNECTED!');
         document.querySelector('#qr-canvas').style.display = 'none';
-        showAudioPrompt();
+        // invisible full-screen click to unlock audio — user won't notice
+        const unlock = document.createElement('div');
+        unlock.style.cssText = 'position:fixed;inset:0;z-index:9999;cursor:default;';
+        unlock.addEventListener('click', () => { initAudio(); unlock.remove(); }, { once: true });
+        document.body.appendChild(unlock);
     });
 
     peer.on('data', data => {
