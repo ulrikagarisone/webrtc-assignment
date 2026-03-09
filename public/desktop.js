@@ -8,6 +8,35 @@ let currentY = targetY;
 const friction = 0.02;
 let peer;
 let ghostImage = null;
+
+// --- Wood drag sound ---
+let audioCtx = null;
+let scrapeSource = null;
+let scrapeGain = null;
+
+function initAudio() {
+    if (audioCtx) return;
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    fetch('/assets/wood_scrape.mp3')
+        .then(r => r.arrayBuffer())
+        .then(buf => audioCtx.decodeAudioData(buf))
+        .then(decoded => {
+            scrapeSource = audioCtx.createBufferSource();
+            scrapeSource.buffer = decoded;
+            scrapeSource.loop = true;
+
+            scrapeGain = audioCtx.createGain();
+            scrapeGain.gain.value = 0;
+
+            scrapeSource.connect(scrapeGain);
+            scrapeGain.connect(audioCtx.destination);
+            scrapeSource.start();
+        });
+}
+
+document.addEventListener('click', initAudio, { once: true });
+
 let ghostCooldown = false;
 
 socket.on('connect', () => {
@@ -223,9 +252,23 @@ function checkLetterHover() {
     }
 }
 
+let prevX = currentX;
+let prevY = currentY;
+
 function animate() {
     currentX += (targetX - currentX) * friction;
     currentY += (targetY - currentY) * friction;
+
+    // Velocity-linked wood scrape sound
+    const vx = currentX - prevX;
+    const vy = currentY - prevY;
+    const speed = Math.sqrt(vx * vx + vy * vy);
+    prevX = currentX;
+    prevY = currentY;
+    if (scrapeGain && audioCtx) {
+        const targetVol = Math.min(speed * 0.12, 0.9);
+        scrapeGain.gain.setTargetAtTime(targetVol, audioCtx.currentTime, 0.05);
+    }
     const planchette = document.querySelector('#planchette');
     if (planchette) {
         planchette.style.left = `${currentX}px`;

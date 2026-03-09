@@ -1121,3 +1121,39 @@ setTimeout(() => flash.remove(), 350);
 
 ---
 
+## Wood Drag Sound
+
+### What I Wanted to Build
+
+I wanted the planchette to make a wood-scraping sound as it moves across the board, with the volume linked to how fast it's moving. Slow movement = quiet, fast tilt = loud scrape.
+
+### What AI Gave Me
+
+AI suggested using the Web Audio API to generate white noise filtered through a bandpass filter to simulate a scraping texture. It wrote the full `initAudio()` function that creates a noise buffer, loops it, and uses a gain node to control volume. It also added velocity calculation inside `animate()` by tracking `prevX`/`prevY` each frame:
+
+```javascript
+const vx = currentX - prevX;
+const vy = currentY - prevY;
+const speed = Math.sqrt(vx * vx + vy * vy);
+scrapeGain.gain.setTargetAtTime(Math.min(speed * 0.08, 0.35), audioCtx.currentTime, 0.05);
+```
+
+### What I Changed
+
+ I found wood scraping sound. I replaced the entire noise buffer approach with a real audio file loaded via `fetch()` and `decodeAudioData()`:
+
+```javascript
+fetch('/assets/wood_scrape.mp3')
+    .then(r => r.arrayBuffer())
+    .then(buf => audioCtx.decodeAudioData(buf))
+    .then(decoded => {
+        scrapeSource = audioCtx.createBufferSource();
+        scrapeSource.buffer = decoded;
+        scrapeSource.loop = true;
+        scrapeSource.connect(scrapeGain);
+        scrapeGain.connect(audioCtx.destination);
+        scrapeSource.start();
+    });
+```
+
+I also increased the max volume from `0.35` to `0.9` since the real recording was quieter than the generated noise, and removed the filter frequency shifting since it's no longer needed with a real sound file.
