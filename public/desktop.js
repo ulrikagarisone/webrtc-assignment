@@ -9,6 +9,53 @@ const friction = 0.02;
 let peer;
 let ghostImage = null;
 
+// --- Possession Mode ---
+let possessed = false;
+let possessionInterval = null;
+
+function triggerPossession() {
+    if (possessed) return;
+    possessed = true;
+
+    // Flash screen red
+    const flash = document.createElement('div');
+    flash.style.cssText = 'position:fixed;inset:0;background:rgba(120,0,0,0.3);pointer-events:none;z-index:998;transition:opacity 1.5s;';
+    document.body.appendChild(flash);
+    setTimeout(() => { flash.style.opacity = '0'; setTimeout(() => flash.remove(), 1500); }, 300);
+
+    // Eerie possession sound from file
+    if (audioCtx) {
+        fetch('/assets/possesd_sound.mp3')
+            .then(r => r.arrayBuffer())
+            .then(buf => audioCtx.decodeAudioData(buf))
+            .then(decoded => {
+                const source = audioCtx.createBufferSource();
+                const gainNode = audioCtx.createGain();
+                source.buffer = decoded;
+                source.loop = false;
+                gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+                gainNode.gain.linearRampToValueAtTime(0.8, audioCtx.currentTime + 0.5);
+                gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 6);
+                source.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+                source.start();
+            });
+    }
+
+    // Move creepily on its own for 6 seconds
+    let elapsed = 0;
+    possessionInterval = setInterval(() => {
+        elapsed += 500;
+        // Pick random position on screen
+        targetX = Math.random() * (window.innerWidth - 250);
+        targetY = Math.random() * (window.innerHeight - 250);
+        if (elapsed >= 6000) {
+            clearInterval(possessionInterval);
+            possessed = false;
+        }
+    }, 500);
+}
+
 // --- Wood drag sound ---
 let audioCtx = null;
 let scrapeSource = null;
@@ -35,7 +82,8 @@ function initAudio() {
         });
 }
 
-document.addEventListener('click', initAudio, { once: true });
+// Show click-to-start overlay once peer connects
+
 
 let ghostCooldown = false;
 
@@ -46,12 +94,12 @@ socket.on('connect', () => {
     QRCode.toCanvas(document.querySelector('#qr-canvas'), url);
 });
 
-socket.on('signal', (myId, signal, peerId) => {
+socket.on('signal', (_myId, signal, peerId) => {
     if (peer) {
         peer.signal(signal);
     } else if (signal.type === 'offer') {
         createPeer(false, peerId);
-        peer.signal(signal);
+        peer.signal(signal);np
     }
 });
 
@@ -78,13 +126,20 @@ const createPeer = (initiator, peerId) => {
     peer.on('connect', () => {
         console.log('CONNECTED!');
         document.querySelector('#qr-canvas').style.display = 'none';
+        // invisible full-screen click to unlock audio — user won't notice
+        const unlock = document.createElement('div');
+        unlock.style.cssText = 'position:fixed;inset:0;z-index:9999;cursor:default;';
+        unlock.addEventListener('click', () => { initAudio(); unlock.remove(); }, { once: true });
+        document.body.appendChild(unlock);
     });
 
     peer.on('data', data => {
         try {
             const motion = JSON.parse(data);
-            targetX += motion.x * 2.5;
-            targetY += motion.y * 2.5;
+            if (!possessed) {
+                targetX += motion.x * 2.5;
+                targetY += motion.y * 2.5;
+            }
             targetX = Math.max(0, Math.min(window.innerWidth - 250, targetX));
             targetY = Math.max(0, Math.min(window.innerHeight - 250, targetY));
 
@@ -245,6 +300,8 @@ function checkLetterHover() {
             document.querySelector(`[data-letter="${found}"]`).classList.add('active');
             if (peer && peer.connected) {
                 peer.send(JSON.stringify({ type: 'letter', value: found }));
+                // Hovering NO triggers possession
+                if (found === 'NO') triggerPossession();
             }
             console.log('Letter:', found);
         }
