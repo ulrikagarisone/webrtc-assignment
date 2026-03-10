@@ -94,12 +94,12 @@ socket.on('connect', () => {
     QRCode.toCanvas(document.querySelector('#qr-canvas'), url);
 });
 
-socket.on('signal', (myId, signal, peerId) => {
+socket.on('signal', (_myId, signal, peerId) => {
     if (peer) {
         peer.signal(signal);
     } else if (signal.type === 'offer') {
         createPeer(false, peerId);
-        peer.signal(signal);
+        peer.signal(signal);np
     }
 });
 
