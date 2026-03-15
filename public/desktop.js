@@ -153,13 +153,14 @@ const createPeer = (initiator, peerId) => {
     peer.on('connect', () => {
         console.log('CONNECTED!');
         document.querySelector('#qr-canvas').style.display = 'none';
+        startGame();
 
     });
 
     peer.on('data', data => {
         try {
             const motion = JSON.parse(data);
-            if (!possessed) {
+            if (!possessed && gamePhase !== 'watching') {
                 targetX += motion.x * 2.5;
                 targetY += motion.y * 2.5;
             }
@@ -306,6 +307,7 @@ document.querySelectorAll('.yes-no-row span').forEach(span => {
     span.dataset.letter = span.textContent.trim();
     span.classList.add('board-word');
 });
+// arch letter spans already have data-letter in HTML — no processing needed
 
 function checkLetterHover() {
     const px = currentX + 125; // horizontal center of planchette
@@ -326,8 +328,8 @@ function checkLetterHover() {
             document.querySelector(`[data-letter="${found}"]`).classList.add('active');
             if (peer && peer.connected) {
                 peer.send(JSON.stringify({ type: 'letter', value: found }));
-                // Hovering NO triggers possession
-                if (found === 'NO') triggerPossession();
+                // Game logic
+                if (gamePhase === 'spelling') checkGameLetter(found);
             }
             console.log('Letter:', found);
         }
@@ -335,6 +337,155 @@ function checkLetterHover() {
     }
 }
 
+
+
+// ── Game Logic ────────────────────────────────────────────────
+const SPIRIT_WORDS = ['DEATH', 'HAUNTED', 'BEWARE', 'CURSED', 'SHADOW', 'BLOOD', 'WICKED', 'DOOM', 'SPECTER', 'GRAVE'];
+
+let targetWord = '';
+let collectedLetters = [];
+let gamePhase = 'idle'; // 'watching' | 'spelling' | 'idle'
+let spiritSpellIndex = 0;
+let lastWrongLetter = null;
+let spiritSoundSource = null;
+
+function showPopup(title, sub = '', duration = 0) {
+    document.querySelector('#popup-title').textContent = title;
+    document.querySelector('#popup-sub').textContent = sub;
+    document.querySelector('#game-popup').classList.add('visible');
+    if (duration > 0) setTimeout(hidePopup, duration);
+}
+
+function hidePopup() {
+    document.querySelector('#game-popup').classList.remove('visible');
+}
+
+function renderWordDisplay() {
+    const display = document.querySelector('#word-display');
+    if (!display) return;
+    display.innerHTML = targetWord.split('').map((letter, i) => {
+        const revealed = collectedLetters[i] !== undefined;
+        return `<span class="word-slot ${revealed ? 'revealed' : ''}">${revealed ? collectedLetters[i] : '_'}</span>`;
+    }).join('');
+}
+
+async function playSpiritSound() {
+    if (!audioCtx) return;
+    const response = await fetch('/assets/possesd_sound.mp3');
+    const arrayBuffer = await response.arrayBuffer();
+    const decoded = await audioCtx.decodeAudioData(arrayBuffer);
+    spiritSoundSource = audioCtx.createBufferSource();
+    const gainNode = audioCtx.createGain();
+    spiritSoundSource.buffer = decoded;
+    spiritSoundSource.loop = true;
+    gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+    gainNode.gain.linearRampToValueAtTime(0.6, audioCtx.currentTime + 1.5);
+    spiritSoundSource.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+    spiritSoundSource.start();
+}
+
+function stopSpiritSound() {
+    if (spiritSoundSource) {
+        spiritSoundSource.stop();
+        spiritSoundSource = null;
+    }
+}
+
+let spiritOverlay = null;
+
+function startGame() {
+    targetWord = SPIRIT_WORDS[Math.floor(Math.random() * SPIRIT_WORDS.length)];
+    collectedLetters = [];
+    lastWrongLetter = null;
+    gamePhase = 'watching';
+    spiritSpellIndex = 0;
+    renderWordDisplay();
+
+    showPopup('THE SPIRITS HAVE A MESSAGE', 'watch carefully...');
+    setTimeout(() => {
+        hidePopup();
+        // Red overlay during spirit spelling
+        spiritOverlay = document.createElement('div');
+        spiritOverlay.style.cssText = 'position:fixed;inset:0;background:rgba(80,0,0,0.25);pointer-events:none;z-index:3;transition:opacity 1s;opacity:0;';
+        document.body.appendChild(spiritOverlay);
+        setTimeout(() => { spiritOverlay.style.opacity = '1'; }, 50);
+        playSpiritSound();
+        setTimeout(spiritSpellNext, 800);
+    }, 3000);
+}
+
+function getLetterPosition(letter) {
+    const el = document.querySelector(`[data-letter="${letter}"]`);
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { x: r.left + r.width / 2 - 125, y: r.top + r.height / 2 - 40 };
+}
+
+function spiritSpellNext() {
+    if (spiritSpellIndex >= targetWord.length) {
+        // Done — reset and let player spell
+        setTimeout(() => {
+            stopSpiritSound();
+            // Fade out red overlay
+            if (spiritOverlay) {
+                spiritOverlay.style.opacity = '0';
+                setTimeout(() => { spiritOverlay.remove(); spiritOverlay = null; }, 1000);
+            }
+            collectedLetters = [];
+            renderWordDisplay();
+            showPopup('NOW IT IS YOUR TURN', 'tilt to spell the same word');
+            setTimeout(() => {
+                hidePopup();
+                gamePhase = 'spelling';
+            }, 3000);
+        }, 1000);
+        return;
+    }
+    const letter = targetWord[spiritSpellIndex];
+    const pos = getLetterPosition(letter);
+    if (pos) { targetX = pos.x; targetY = pos.y; }
+
+    setTimeout(() => {
+        collectedLetters.push(letter);
+        renderWordDisplay();
+        spiritSpellIndex++;
+        spiritSpellNext();
+    }, 2200);
+}
+
+function checkGameLetter(letter) {
+    if (gamePhase !== 'spelling') return;
+    if (!letter.match(/^[A-Z]$/)) return;
+    if (letter === lastWrongLetter) return;
+
+    const nextIndex = collectedLetters.length;
+    if (nextIndex >= targetWord.length) return;
+
+    if (letter === targetWord[nextIndex]) {
+        lastWrongLetter = null;
+        collectedLetters.push(letter);
+        renderWordDisplay();
+        if (collectedLetters.length === targetWord.length) {
+            gamePhase = 'idle';
+            showPopup('✦ THE SPIRITS ARE PLEASED ✦', 'you have communicated', 4000);
+            setTimeout(() => { hauntScreen(); setTimeout(startGame, 6000); }, 800);
+        }
+    } else {
+        lastWrongLetter = letter;
+        shakeBoard();
+    }
+}
+
+function shakeBoard() {
+    const board = document.querySelector('#board-wrap');
+    if (!board) return;
+    let n = 0;
+    const iv = setInterval(() => {
+        board.style.transform = `translate(${(Math.random() - 0.5) * 10}px,${(Math.random() - 0.5) * 6}px)`;
+        if (++n > 6) { clearInterval(iv); board.style.transform = ''; }
+    }, 80);
+}
 
 let prevX = currentX;
 let prevY = currentY;
