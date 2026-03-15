@@ -30,7 +30,7 @@
             background-size: cover;
             background-position: center;
             background-repeat: no-repeat;
-            opacity: 0.01;
+            opacity: 0.08;
             pointer-events: none;
             z-index: 1;
             filter: invert(1) sepia(1) saturate(2) hue-rotate(5deg);
@@ -134,13 +134,51 @@
             z-index: 2;
         }
 
+        /* Decorative pattern overlays — corners */
+        .corner-pattern {
+            position: fixed;
+            width: 260px;
+            height: 260px;
+            opacity: 0.12;
+            pointer-events: none;
+            z-index: 3;
+        }
+
+        .corner-pattern img {
+            width: 100%;
+            height: 100%;
+        }
+
+        .corner-pattern.tl {
+            top: 0;
+            left: 0;
+            transform: rotate(0deg);
+        }
+
+        .corner-pattern.tr {
+            top: 0;
+            right: 0;
+            transform: rotate(90deg);
+        }
+
+        .corner-pattern.bl {
+            bottom: 0;
+            left: 0;
+            transform: rotate(270deg);
+        }
+
+        .corner-pattern.br {
+            bottom: 0;
+            right: 0;
+            transform: rotate(180deg);
+        }
+
         /* Title — BIG with glow */
         #board-title {
             font-family: 'Cinzel Decorative', serif;
-            font-size: clamp(2.8rem, 6vw, 6.5rem);
+            font-size: clamp(3rem, 6.5vw, 7rem);
             letter-spacing: 0.5em;
             color: #d4af37;
-            font-weight: 900;
             opacity: 0.85;
             text-shadow: 0 0 60px rgba(212, 175, 55, 0.2), 0 2px 20px rgba(0, 0, 0, 0.9);
             text-align: center;
@@ -154,8 +192,8 @@
             justify-content: space-between;
             padding: 0 6vw;
             font-family: 'Cinzel', serif;
-            font-size: clamp(2rem, 4vw, 4.5rem);
-            font-weight: 500;
+            font-size: clamp(2.2rem, 4.5vw, 5rem);
+            font-weight: 700;
             letter-spacing: 0.5em;
             opacity: 0.65;
             pointer-events: none;
@@ -206,6 +244,73 @@
             text-align: center;
             pointer-events: none;
             width: 100%;
+        }
+
+        /* ── Game UI ── */
+        #game-ui {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        #word-display {
+            display: flex;
+            gap: clamp(8px, 1.5vw, 20px);
+            font-family: 'Cinzel', serif;
+            font-size: clamp(1.8rem, 3vw, 3rem);
+            letter-spacing: 0.2em;
+        }
+
+        .word-slot {
+            color: rgba(212, 175, 55, 0.25);
+            border-bottom: 2px solid rgba(212, 175, 55, 0.3);
+            min-width: 1.2em;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        .word-slot.revealed {
+            color: #fff8dc;
+            text-shadow: 0 0 15px rgba(255, 220, 100, 0.9), 0 0 30px rgba(255, 180, 0, 0.5);
+            border-bottom-color: #d4af37;
+            animation: letterReveal 0.4s ease-out;
+        }
+
+        @keyframes letterReveal {
+            0% {
+                transform: scale(1.8);
+                opacity: 0;
+            }
+
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
+        #game-lives {
+            font-family: 'Cinzel', serif;
+            font-size: 1.4rem;
+            letter-spacing: 0.4em;
+            color: #d4af37;
+            opacity: 0.7;
+        }
+
+        #game-hint {
+            font-family: 'Cinzel', serif;
+            font-size: clamp(0.7rem, 1.2vw, 1rem);
+            letter-spacing: 0.3em;
+            color: rgba(212, 175, 55, 0.6);
+            text-transform: uppercase;
+            opacity: 0;
+            transition: opacity 0.4s ease;
         }
 
         /* Good bye */
@@ -303,6 +408,114 @@
         #otherCamera {
             display: none;
         }
+
+        /* ── GAME POPUP ── */
+        #game-popup {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0.9);
+            background: rgba(6, 3, 1, 0.96);
+            border: 1px solid rgba(212, 175, 55, 0.5);
+            padding: 50px 80px;
+            text-align: center;
+            z-index: 600;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.5s ease, transform 0.5s ease;
+            min-width: 500px;
+        }
+
+        #game-popup.visible {
+            opacity: 1;
+            transform: translate(-50%, -50%) scale(1);
+        }
+
+        /* corner brackets */
+        #game-popup::before,
+        #game-popup::after {
+            content: '';
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            border-color: #d4af37;
+            border-style: solid;
+        }
+
+        #game-popup::before {
+            top: -4px;
+            left: -4px;
+            border-width: 2px 0 0 2px;
+        }
+
+        #game-popup::after {
+            bottom: -4px;
+            right: -4px;
+            border-width: 0 2px 2px 0;
+        }
+
+        #popup-title {
+            font-family: 'Cinzel Decorative', serif;
+            font-size: clamp(1.4rem, 2.5vw, 2.4rem);
+            letter-spacing: 0.3em;
+            color: #d4af37;
+            text-shadow: 0 0 30px rgba(212, 175, 55, 0.5);
+            margin-bottom: 16px;
+        }
+
+        #popup-sub {
+            font-family: 'Cinzel', serif;
+            font-size: clamp(0.75rem, 1.2vw, 1rem);
+            letter-spacing: 0.25em;
+            color: rgba(212, 175, 55, 0.5);
+            font-style: italic;
+        }
+
+        /* ── WORD DISPLAY ── */
+        #game-ui {
+            position: fixed;
+            bottom: 28px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        #word-display {
+            display: flex;
+            gap: clamp(8px, 1.5vw, 20px);
+            font-family: 'Cinzel', serif;
+            font-size: clamp(1.8rem, 3vw, 3rem);
+            letter-spacing: 0.15em;
+            justify-content: center;
+        }
+
+        .word-slot {
+            color: rgba(212, 175, 55, 0.2);
+            border-bottom: 2px solid rgba(212, 175, 55, 0.25);
+            min-width: 1.1em;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        .word-slot.revealed {
+            color: #fff8dc;
+            text-shadow: 0 0 15px rgba(255, 220, 100, 0.9), 0 0 30px rgba(255, 180, 0, 0.5);
+            border-bottom-color: #d4af37;
+            animation: letterReveal 0.4s ease-out;
+        }
+
+        @keyframes letterReveal {
+            0% {
+                transform: scale(1.8);
+                opacity: 0;
+            }
+
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
     </style>
 </head>
 
@@ -311,9 +524,11 @@
     <!-- START SCREEN -->
     <div id="start-screen">
         <h1>Ouija Board</h1>
-        <p> something is waiting on the other side </p>
+        <p>something is waiting on the other side</p>
         <button id="begin-btn" class="spirit-btn">Begin Séance</button>
     </div>
+
+
 
     <!-- BOARD -->
     <div id="board-wrap">
@@ -340,6 +555,15 @@
         </div>
 
         <div class="goodbye-row">✦ &nbsp; G O O D &nbsp; B Y E &nbsp; ✦</div>
+    </div>
+
+    <!-- GAME UI -->
+    <div id="game-popup">
+        <div id="popup-title"></div>
+        <div id="popup-sub"></div>
+    </div>
+    <div id="game-ui">
+        <div id="word-display"></div>
     </div>
 
     <canvas id="qr-canvas"></canvas>
