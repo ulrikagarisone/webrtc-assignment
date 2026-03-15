@@ -19,8 +19,8 @@ if (roomId) {
         if (buttonClicked) createPeer(true, desktopId);
     });
 
-    socket.on('signal', (myId, signal, peerId) => {
-        if (peer) { peer.signal(signal); }
+    socket.on('signal', (_myId, signal, _peerId) => {
+        if (peer) peer.signal(signal);
     });
 
     const createPeer = (initiator, peerId) => {
@@ -32,13 +32,11 @@ if (roomId) {
         peer.on('signal', data => { socket.emit('signal', peerId, data); });
         peer.on('connect', () => {
             console.log('CONNECTED!');
-            if (navigator.vibrate) navigator.vibrate(200);
         });
         peer.on('data', data => {
             try {
                 const msg = JSON.parse(data);
                 if (msg.type === 'letter') {
-                    if (navigator.vibrate) navigator.vibrate(120);
                     const display = document.querySelector('#letter-display');
                     if (display) {
                         display.textContent = msg.value;

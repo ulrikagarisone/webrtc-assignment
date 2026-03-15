@@ -13,7 +13,7 @@ let ghostImage = null;
 let possessed = false;
 let possessionInterval = null;
 
-function triggerPossession() {
+async function triggerPossession() {
     if (possessed) return;
     possessed = true;
 
@@ -25,21 +25,19 @@ function triggerPossession() {
 
     // Eerie possession sound from file
     if (audioCtx) {
-        fetch('/assets/possesd_sound.mp3')
-            .then(r => r.arrayBuffer())
-            .then(buf => audioCtx.decodeAudioData(buf))
-            .then(decoded => {
-                const source = audioCtx.createBufferSource();
-                const gainNode = audioCtx.createGain();
-                source.buffer = decoded;
-                source.loop = false;
-                gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
-                gainNode.gain.linearRampToValueAtTime(0.8, audioCtx.currentTime + 0.5);
-                gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 6);
-                source.connect(gainNode);
-                gainNode.connect(audioCtx.destination);
-                source.start();
-            });
+        const response = await fetch('/assets/possesd_sound.mp3');
+        const arrayBuffer = await response.arrayBuffer();
+        const decoded = await audioCtx.decodeAudioData(arrayBuffer);
+        const source = audioCtx.createBufferSource();
+        const gainNode = audioCtx.createGain();
+        source.buffer = decoded;
+        source.loop = false;
+        gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+        gainNode.gain.linearRampToValueAtTime(0.8, audioCtx.currentTime + 0.5);
+        gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 6);
+        source.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        source.start();
     }
 
     // Move creepily on its own for 6 seconds
@@ -61,25 +59,23 @@ let audioCtx = null;
 let scrapeSource = null;
 let scrapeGain = null;
 
-function initAudio() {
+async function initAudio() {
     if (audioCtx) return;
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    audioCtx = new AudioContext();
+    const response = await fetch('/assets/wood_scrape.mp3');
+    const arrayBuffer = await response.arrayBuffer();
+    const decoded = await audioCtx.decodeAudioData(arrayBuffer);
 
-    fetch('/assets/wood_scrape.mp3')
-        .then(r => r.arrayBuffer())
-        .then(buf => audioCtx.decodeAudioData(buf))
-        .then(decoded => {
-            scrapeSource = audioCtx.createBufferSource();
-            scrapeSource.buffer = decoded;
-            scrapeSource.loop = true;
+    scrapeSource = audioCtx.createBufferSource();
+    scrapeSource.buffer = decoded;
+    scrapeSource.loop = true;
 
-            scrapeGain = audioCtx.createGain();
-            scrapeGain.gain.value = 0;
+    scrapeGain = audioCtx.createGain();
+    scrapeGain.gain.value = 0;
 
-            scrapeSource.connect(scrapeGain);
-            scrapeGain.connect(audioCtx.destination);
-            scrapeSource.start();
-        });
+    scrapeSource.connect(scrapeGain);
+    scrapeGain.connect(audioCtx.destination);
+    scrapeSource.start();
 }
 
 // Show click-to-start overlay once peer connects
@@ -99,7 +95,7 @@ socket.on('signal', (_myId, signal, peerId) => {
         peer.signal(signal);
     } else if (signal.type === 'offer') {
         createPeer(false, peerId);
-        peer.signal(signal);np
+        peer.signal(signal);
     }
 });
 
