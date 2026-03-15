@@ -25,12 +25,16 @@
             overflow: hidden;
         }
 
+        /* ── Intro ── */
         #intro-ui {
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 20px;
+            justify-content: center;
+            gap: 16px;
             padding: 20px;
+            width: 100%;
+            min-height: 100vh;
         }
 
         h1 {
@@ -63,29 +67,97 @@
             color: #a68b5b;
         }
 
-        #start {
+        #start,
+        #capture-btn {
             background: transparent;
             color: #d4af37;
             border: 2px solid #d4af37;
             padding: 15px 40px;
-            font-size: 1.5rem;
+            font-size: 1.4rem;
+            font-family: 'Garamond', 'Georgia', serif;
             text-transform: uppercase;
             cursor: pointer;
+            letter-spacing: 2px;
             box-shadow: inset 0 0 10px rgba(212, 175, 55, 0.2);
             transition: 0.3s;
         }
 
-        #start:hover {
+        #start:hover,
+        #capture-btn:hover {
             background: rgba(212, 175, 55, 0.1);
         }
 
-        #planchette-img {
-            width: 300px;
-            height: auto;
-            filter: drop-shadow(0 0 15px rgba(0, 0, 0, 0.8));
-            transition: transform 0.1s ease-out;
+        /* ── Face capture ── */
+        #face-capture-ui {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 24px;
+            padding: 20px;
+            width: 100%;
+            min-height: 100vh;
         }
 
+        .face-title {
+            font-size: 1rem;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            color: #d4af37;
+            margin: 0;
+            font-style: normal;
+            animation: flicker 2s infinite alternate;
+        }
+
+        #face-frame {
+            position: relative;
+            width: 240px;
+            height: 240px;
+        }
+
+        #face-preview {
+            width: 240px;
+            height: 240px;
+            object-fit: cover;
+            border-radius: 50%;
+            transform: scaleX(-1);
+            filter: grayscale(0.4) brightness(0.85);
+        }
+
+        #face-oval {
+            position: absolute;
+            inset: 0;
+            border-radius: 50%;
+            border: 3px solid rgba(212, 175, 55, 0.8);
+            box-shadow: 0 0 20px rgba(212, 175, 55, 0.4), inset 0 0 20px rgba(0, 0, 0, 0.5);
+            pointer-events: none;
+            animation: ovalPulse 2s ease-in-out infinite;
+        }
+
+        @keyframes ovalPulse {
+
+            0%,
+            100% {
+                box-shadow: 0 0 15px rgba(212, 175, 55, 0.3), inset 0 0 20px rgba(0, 0, 0, 0.5);
+            }
+
+            50% {
+                box-shadow: 0 0 40px rgba(212, 175, 55, 0.8), inset 0 0 20px rgba(0, 0, 0, 0.5);
+            }
+        }
+
+        #face-hint {
+            position: absolute;
+            bottom: -28px;
+            width: 100%;
+            text-align: center;
+            font-size: 0.75rem;
+            color: #7a5c3a;
+            letter-spacing: 1px;
+            margin: 0;
+        }
+
+        /* ── Planchette ── */
         #planchette-ui {
             display: none;
             opacity: 0;
@@ -93,6 +165,13 @@
             align-items: center;
             justify-content: center;
             transition: opacity 1s ease;
+        }
+
+        #planchette-img {
+            width: 300px;
+            height: auto;
+            filter: drop-shadow(0 0 15px rgba(0, 0, 0, 0.8));
+            transition: transform 0.1s ease-out;
         }
 
         #letter-display {
@@ -107,6 +186,24 @@
             animation: letterPop 0.4s ease-out forwards;
         }
 
+        @keyframes letterPop {
+            0% {
+                transform: scale(1);
+                color: #d4af37;
+            }
+
+            40% {
+                transform: scale(1.7);
+                color: #fff8dc;
+                text-shadow: 0 0 40px rgba(255, 220, 100, 0.9);
+            }
+
+            100% {
+                transform: scale(1.1);
+                color: #d4af37;
+            }
+        }
+
         @keyframes flashFade {
             0% {
                 opacity: 1;
@@ -117,28 +214,13 @@
             }
         }
 
-        @keyframes letterPop {
-            0% {
-                transform: scale(1);
-                opacity: 0;
-            }
-
-            50% {
-                transform: scale(1.5);
-                opacity: 1;
-            }
-
-            100% {
-                transform: scale(1);
-                opacity: 1;
-            }
-        }
         .instruction {
-        margin-top: 10px;
-        font-size: 1.25rem;
-        letter-spacing: 1px;
-        color: #d4af37;
-        animation: pulse 2s infinite;
+            margin-top: 10px;
+            font-size: 1.25rem;
+            letter-spacing: 1px;
+            color: #d4af37;
+            font-style: normal;
+            animation: pulse 2s infinite;
         }
 
         @keyframes pulse {
@@ -156,16 +238,30 @@
 </head>
 
 <body>
+
     <div id="intro-ui">
         <h1>Ouija</h1>
         <p>Commune with the world beyond...</p>
+        <p style="font-size:0.75rem; color:#7a5c3a; margin:0;">Use Safari for best experience</p>
         <button id="start">Enter Circle</button>
     </div>
+
+    <div id="face-capture-ui">
+        <p class="face-title">The spirits need your face</p>
+        <div id="face-frame">
+            <video id="face-preview" playsinline autoplay muted></video>
+            <div id="face-oval"></div>
+            <p id="face-hint">align your face with the oval</p>
+        </div>
+        <button id="capture-btn">Offer your soul</button>
+    </div>
+
     <div id="planchette-ui">
         <div id="letter-display"></div>
         <img src="/assets/heart_teller.png" id="planchette-img" alt="Planchette">
         <p class="instruction">TILT TO GUIDE THE SPIRITS</p>
     </div>
+
     <script src="/socket.io/socket.io.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/simple-peer/9.11.1/simplepeer.min.js"></script>
     <script src="mobile.js"></script>
