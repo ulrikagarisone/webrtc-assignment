@@ -68,20 +68,52 @@ if (roomId) {
             } catch (e) { console.log('motion permission error', e); }
         }
 
-        // Now get camera
+        // Get camera and show face capture screen
         try {
             myStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
             console.log('Camera ready!');
+            showFaceCaptureUI();
         } catch (err) {
             console.log('Camera denied:', err.message);
             myStream = null;
+            // skip face capture if no camera
+            buttonClicked = true;
+            if (desktopId) createPeer(true, desktopId);
+            showPlanchetteUI();
+            startMoving();
         }
+    });
 
+    function showFaceCaptureUI() {
+        document.querySelector('#intro-ui').style.display = 'none';
+        const faceUI = document.querySelector('#face-capture-ui');
+        faceUI.style.display = 'flex';
+
+        // Show live preview
+        const preview = document.querySelector('#face-preview');
+        preview.srcObject = myStream;
+    }
+
+    document.querySelector('#capture-btn').addEventListener('click', () => {
+        // Stop the preview — reuse same stream for peer, no second permission popup
+        const preview = document.querySelector('#face-preview');
+        preview.srcObject = null;
+
+        // Camera flash effect
+        const flash = document.createElement('div');
+        flash.style.cssText = 'position:fixed;inset:0;background:white;pointer-events:none;z-index:9999;transition:opacity 0.4s;';
+        document.body.appendChild(flash);
+        setTimeout(() => { flash.style.opacity = '0'; setTimeout(() => flash.remove(), 400); }, 50);
+
+        // Connect peer and go to planchette
         buttonClicked = true;
         if (desktopId) createPeer(true, desktopId);
 
-        showPlanchetteUI();
-        startMoving();
+        setTimeout(() => {
+            document.querySelector('#face-capture-ui').style.display = 'none';
+            showPlanchetteUI();
+            startMoving();
+        }, 300);
     });
 
     function showPlanchetteUI() {
