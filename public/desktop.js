@@ -17,13 +17,30 @@ async function triggerPossession() {
     if (possessed) return;
     possessed = true;
 
-    // Flash screen red
-    const flash = document.createElement('div');
-    flash.style.cssText = 'position:fixed;inset:0;background:rgba(120,0,0,0.3);pointer-events:none;z-index:998;transition:opacity 1.5s;';
-    document.body.appendChild(flash);
-    setTimeout(() => { flash.style.opacity = '0'; setTimeout(() => flash.remove(), 1500); }, 300);
+    // Dramatic screen effect — vignette closes in
+    const vignette = document.createElement('div');
+    vignette.style.cssText = 'position:fixed;inset:0;background:radial-gradient(ellipse at center, transparent 30%, rgba(80,0,0,0.85) 100%);pointer-events:none;z-index:997;opacity:0;transition:opacity 0.8s;';
+    document.body.appendChild(vignette);
+    setTimeout(() => { vignette.style.opacity = '1'; }, 50);
 
-    // Eerie possession sound from file
+    // Red flash on top
+    const flash = document.createElement('div');
+    flash.style.cssText = 'position:fixed;inset:0;background:rgba(140,0,0,0.4);pointer-events:none;z-index:998;transition:opacity 1.2s;';
+    document.body.appendChild(flash);
+    setTimeout(() => { flash.style.opacity = '0'; }, 200);
+
+    // Shake the board title
+    const title = document.querySelector('#board-title');
+    if (title) {
+        title.style.transition = 'transform 0.1s';
+        let shakes = 0;
+        const shakeInterval = setInterval(() => {
+            title.style.transform = `translate(${(Math.random() - 0.5) * 12}px, ${(Math.random() - 0.5) * 8}px)`;
+            if (++shakes > 10) { clearInterval(shakeInterval); title.style.transform = ''; }
+        }, 80);
+    }
+
+    // Play sound if audio is ready
     if (audioCtx) {
         const response = await fetch('/assets/possesd_sound.mp3');
         const arrayBuffer = await response.arrayBuffer();
@@ -33,22 +50,31 @@ async function triggerPossession() {
         source.buffer = decoded;
         source.loop = false;
         gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
-        gainNode.gain.linearRampToValueAtTime(0.8, audioCtx.currentTime + 0.5);
+        gainNode.gain.linearRampToValueAtTime(0.9, audioCtx.currentTime + 0.5);
         gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 6);
         source.connect(gainNode);
         gainNode.connect(audioCtx.destination);
         source.start();
     }
 
-    // Move creepily on its own for 6 seconds
+    // Move creepily — stay within the board area
     let elapsed = 0;
+    const boardEl = document.querySelector('#board-wrap');
+    const boardRect = boardEl ? boardEl.getBoundingClientRect() : null;
+    const minX = boardRect ? boardRect.left + 40 : 100;
+    const maxX = boardRect ? boardRect.right - 290 : window.innerWidth - 290;
+    const minY = boardRect ? boardRect.top + 40 : 100;
+    const maxY = boardRect ? boardRect.bottom - 290 : window.innerHeight - 290;
+
     possessionInterval = setInterval(() => {
         elapsed += 500;
-        // Pick random position on screen
-        targetX = Math.random() * (window.innerWidth - 250);
-        targetY = Math.random() * (window.innerHeight - 250);
+        targetX = minX + Math.random() * (maxX - minX);
+        targetY = minY + Math.random() * (maxY - minY);
         if (elapsed >= 6000) {
             clearInterval(possessionInterval);
+            // Fade out vignette
+            vignette.style.opacity = '0';
+            setTimeout(() => { vignette.remove(); flash.remove(); }, 1000);
             possessed = false;
         }
     }, 500);
@@ -78,9 +104,6 @@ async function initAudio() {
     scrapeSource.start();
 }
 
-// Show click-to-start overlay once peer connects
-
-
 let ghostCooldown = false;
 
 socket.on('connect', () => {
@@ -88,6 +111,14 @@ socket.on('connect', () => {
     socket.emit('join', roomId);
     const url = `${window.location.protocol}//${window.location.host}/mobile.html?room=${roomId}`;
     QRCode.toCanvas(document.querySelector('#qr-canvas'), url);
+});
+
+// Start screen — button unlocks audio then fades away
+document.querySelector('#begin-btn').addEventListener('click', () => {
+    initAudio();
+    const screen = document.querySelector('#start-screen');
+    screen.style.opacity = '0';
+    setTimeout(() => { screen.style.display = 'none'; }, 1000);
 });
 
 socket.on('signal', (_myId, signal, peerId) => {
@@ -122,11 +153,7 @@ const createPeer = (initiator, peerId) => {
     peer.on('connect', () => {
         console.log('CONNECTED!');
         document.querySelector('#qr-canvas').style.display = 'none';
-        // invisible full-screen click to unlock audio — user won't notice
-        const unlock = document.createElement('div');
-        unlock.style.cssText = 'position:fixed;inset:0;z-index:9999;cursor:default;';
-        unlock.addEventListener('click', () => { initAudio(); unlock.remove(); }, { once: true });
-        document.body.appendChild(unlock);
+
     });
 
     peer.on('data', data => {
@@ -263,9 +290,7 @@ document.head.appendChild(glowStyle);
 
 // give every letter/word a data-letter attribute for detection
 document.querySelectorAll('.board-content p').forEach(row => {
-    const text = row.textContent.trim();
-    // replace each row's text with individual spans
-    const words = text.split(/\s+/).filter(w => w.length > 0);
+    const words = row.textContent.trim().split(/\s+/).filter(w => w.length > 0);
     row.innerHTML = '';
     words.forEach(word => {
         const span = document.createElement('span');
@@ -275,6 +300,11 @@ document.querySelectorAll('.board-content p').forEach(row => {
         span.style.margin = '0 8px';
         row.appendChild(span);
     });
+});
+// yes-no spans already have data-letter in HTML
+document.querySelectorAll('.yes-no-row span').forEach(span => {
+    span.dataset.letter = span.textContent.trim();
+    span.classList.add('board-word');
 });
 
 function checkLetterHover() {
@@ -304,6 +334,7 @@ function checkLetterHover() {
         currentActiveLetter = found;
     }
 }
+
 
 let prevX = currentX;
 let prevY = currentY;
