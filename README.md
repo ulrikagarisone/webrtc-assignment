@@ -1202,3 +1202,279 @@ if (found === 'NO') triggerPossession();
 ```
 
 **I replaced the generated drone with a real recorded sound.** I found and downloaded a creepy possession sound and loaded it the same way as the wood scrape — via `fetch()` and `decodeAudioData()`. The real recording is much more atmospheric than synthesized oscillators.
+
+## Dev Diary — March 15, 2026
+## Teacher Consult Feedback + Game Logic
+ 
+---
+ 
+### Part 1 — Teacher Feedback: Code Quality
+ 
+After the consult my teacher gave me three things to fix:
+ 
+**1. Audio — use modern async/await instead of `.then()` chains**
+ 
+What AI originally gave me:
+```javascript
+fetch('/assets/wood_scrape.mp3')
+    .then(r => r.arrayBuffer())
+    .then(buf => audioCtx.decodeAudioData(buf))
+    .then(decoded => {
+        scrapeSource = audioCtx.createBufferSource();
+        scrapeSource.buffer = decoded;
+        scrapeSource.loop = true;
+        scrapeGain = audioCtx.createGain();
+        scrapeGain.gain.value = 0;
+        scrapeSource.connect(scrapeGain);
+        scrapeGain.connect(audioCtx.destination);
+        scrapeSource.start();
+    });
+```
+ 
+What I changed it to — async/await is cleaner and is the current best practice:
+```javascript
+async function initAudio() {
+    if (audioCtx) return;
+    audioCtx = new AudioContext();
+    const response = await fetch('/assets/wood_scrape.mp3');
+    const arrayBuffer = await response.arrayBuffer();
+    const decoded = await audioCtx.decodeAudioData(arrayBuffer);
+    scrapeSource = audioCtx.createBufferSource();
+    scrapeSource.buffer = decoded;
+    scrapeSource.loop = true;
+    scrapeGain = audioCtx.createGain();
+    scrapeGain.gain.value = 0;
+    scrapeSource.connect(scrapeGain);
+    scrapeGain.connect(audioCtx.destination);
+    scrapeSource.start();
+}
+```
+ 
+I also replaced `new (window.AudioContext || window.webkitAudioContext)()` with just `new AudioContext()` — `webkitAudioContext` hasn't been needed since 2014.
+ 
+**2. Remove vibration**
+ 
+AI had added `navigator.vibrate()` for letter feedback. My teacher uses an iPhone and vibration is completely blocked on iOS Safari — it would never work in the demo. Removed it entirely from mobile.js.
+ 
+**3. Avoid unnecessary try/catch**
+ 
+AI had wrapped the signal handler in try/catch. My teacher said only use try/catch where genuinely needed. `peer.signal()` rarely throws so it doesn't need it:
+ 
+What AI gave me:
+```javascript
+socket.on('signal', (myId, signal, peerId) => {
+    try {
+        if (peer) peer.signal(signal);
+    } catch(e) { console.log(e); }
+});
+```
+ 
+What I changed it to:
+```javascript
+socket.on('signal', (_myId, signal, _peerId) => {
+    if (peer) peer.signal(signal);
+});
+```
+ 
+The underscore prefix on `_myId` and `_peerId` tells the linter these parameters are intentionally unused.
+ 
+---
+ 
+### Part 2 — Desktop Start Screen
+ 
+#### Problem
+Chrome blocks `AudioContext` from starting without a user gesture on the page. The wood scrape sound and possession sound were silently failing until someone clicked.
+ 
+#### What AI Gave Me
+AI first added an invisible full-screen overlay div after connection that captured the first click to unlock audio:
+```javascript
+const unlock = document.createElement('div');
+unlock.style.cssText = 'position:fixed;inset:0;z-index:9999;cursor:default;';
+unlock.addEventListener('click', () => { initAudio(); unlock.remove(); }, { once: true });
+document.body.appendChild(unlock);
+```
+This worked but felt wrong — users had no idea they needed to click, and it also blocked interaction with the board.
+ 
+#### What I Changed
+I asked for a proper start screen instead. A visible full-screen overlay with a "Begin Séance" button — matching the mobile aesthetic with the same Cinzel font and gold corner bracket button style. The button has a clear purpose AND unlocks audio as a side effect:
+ 
+```javascript
+document.querySelector('#begin-btn').addEventListener('click', () => {
+    initAudio();
+    const screen = document.querySelector('#start-screen');
+    screen.style.opacity = '0';
+    setTimeout(() => { screen.style.display = 'none'; }, 1000);
+});
+```
+ 
+---
+ 
+### Part 3 — Board Redesign
+ 
+#### Problem
+The board had no visual hierarchy — title, YES/NO, letters and numbers were all roughly the same size. It looked flat and nothing like a real Ouija board.
+ 
+#### What AI Gave Me
+AI restructured the layout using `justify-content: space-evenly`, Cinzel Decorative for the title, YES/NO on opposite sides with `justify-content: space-between`, gold `✦` dividers between sections, and GOOD BYE at the bottom. It used `clamp()` on all font sizes so the layout scales automatically to any screen size.
+ 
+#### What I Changed
+I uploaded a custom SVG decorative pattern (`board_pattern.svg`) and replaced the CSS wood grain lines with it as a full-screen background overlay:
+ 
+```css
+body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url('/assets/board_pattern.svg');
+    background-size: cover;
+    opacity: 0.08;
+    filter: invert(1) sepia(1) saturate(2) hue-rotate(5deg);
+    pointer-events: none;
+    z-index: 1;
+}
+```
+ 
+I also pushed for a much clearer size hierarchy — title at `6.5vw`, YES/NO bold and wide apart, letters at `3.8vw`, numbers smaller, GOOD BYE barely visible at the bottom.
+ 
+---
+ 
+### Part 4 — Possession Mode Improvements
+ 
+#### What AI Originally Gave Me
+The first version of possession mode triggered on a random timer every 25–45 seconds, made the planchette move randomly across the whole screen, and just flashed red:
+ 
+```javascript
+function schedulePossession() {
+    const delay = 25000 + Math.random() * 20000;
+    possessionTimeout = setTimeout(triggerPossession, delay);
+}
+ 
+// Move creepily on its own for 6 seconds
+possessionInterval = setInterval(() => {
+    elapsed += 500;
+    targetX = Math.random() * (window.innerWidth - 250);
+    targetY = Math.random() * (window.innerHeight - 250);
+    if (elapsed >= 6000) {
+        clearInterval(possessionInterval);
+        possessed = false;
+    }
+}, 500);
+```
+ 
+#### What I Changed
+ 
+**Trigger** — changed from random timer to hovering over NO. Makes narrative sense — you ask the spirits and they answer by possessing the board:
+```javascript
+if (found === 'NO') triggerPossession();
+```
+ 
+**Visual** — replaced the basic red flash with a vignette that dramatically closes in from the edges:
+```javascript
+const vignette = document.createElement('div');
+vignette.style.cssText = 'position:fixed;inset:0;background:radial-gradient(ellipse at center, transparent 30%, rgba(80,0,0,0.85) 100%);pointer-events:none;z-index:997;opacity:0;transition:opacity 0.8s;';
+document.body.appendChild(vignette);
+setTimeout(() => { vignette.style.opacity = '1'; }, 50);
+```
+ 
+**Board title shake** — I added a shake effect so the title rattles when possession triggers:
+```javascript
+const shakeInterval = setInterval(() => {
+    title.style.transform = `translate(${(Math.random()-0.5)*12}px, ${(Math.random()-0.5)*8}px)`;
+    if (++shakes > 10) { clearInterval(shakeInterval); title.style.transform = ''; }
+}, 80);
+```
+ 
+**Bounds** — planchette now stays within the board area instead of flying off screen:
+```javascript
+const boardRect = document.querySelector('#board-wrap').getBoundingClientRect();
+const minX = boardRect.left + 40;
+const maxX = boardRect.right - 290;
+targetX = minX + Math.random() * (maxX - minX);
+```
+ 
+---
+ 
+### Part 5 — Game Logic: Watch Then Spell
+ 
+#### The Idea
+I wanted a game that uses all the existing mechanics and makes sense with the Ouija theme. The concept: the spirits spell out a word by moving the planchette on their own while eerie music plays, then the player has to repeat the same word by tilting.
+ 
+#### What AI Gave Me
+AI built a game state machine with three phases — `watching`, `spelling`, `idle`. The core function `spiritSpellNext()` recursively moves the planchette to each letter by reading its pixel position using `getBoundingClientRect()`:
+ 
+```javascript
+function getLetterPosition(letter) {
+    const el = document.querySelector(`[data-letter="${letter}"]`);
+    const r = el.getBoundingClientRect();
+    return { x: r.left + r.width / 2 - 125, y: r.top + r.height / 2 - 40 };
+}
+ 
+function spiritSpellNext() {
+    if (spiritSpellIndex >= targetWord.length) {
+        // done — switch to player turn
+        return;
+    }
+    const letter = targetWord[spiritSpellIndex];
+    const pos = getLetterPosition(letter);
+    if (pos) { targetX = pos.x; targetY = pos.y; }
+ 
+    setTimeout(() => {
+        collectedLetters.push(letter);
+        renderWordDisplay();
+        spiritSpellIndex++;
+        spiritSpellNext();
+    }, 1400); // original delay
+}
+```
+ 
+AI also wrote the popup system using a CSS class toggle, the word display with `_` slots that reveal as letters are found, and the win condition that triggers the ghost flying across.
+ 
+#### What I Changed
+ 
+**Phone motion blocked during watch phase** — AI didn't consider that tilting the phone during the spirit spelling phase would mess everything up. I added a phase check to the motion data handler:
+```javascript
+if (!possessed && gamePhase !== 'watching') {
+    targetX += motion.x * 2.5;
+    targetY += motion.y * 2.5;
+}
+```
+ 
+**Timing** — the planchette moves with lerp friction `0.02` so it takes time to reach each letter. AI's original 1400ms wasn't long enough — the planchette hadn't arrived before moving to the next target. After testing I increased it to 2200ms:
+```javascript
+setTimeout(() => {
+    collectedLetters.push(letter);
+    renderWordDisplay();
+    spiritSpellIndex++;
+    spiritSpellNext();
+}, 2200); // increased from 1400
+```
+ 
+**Creepy music during spirit spelling** — I wanted the possessed sound to loop while the spirits spell. AI wrote `playSpiritSound()` using async/await to match the new best practice pattern, fading in over 1.5 seconds:
+```javascript
+async function playSpiritSound() {
+    if (!audioCtx) return;
+    const response = await fetch('/assets/possesd_sound.mp3');
+    const arrayBuffer = await response.arrayBuffer();
+    const decoded = await audioCtx.decodeAudioData(arrayBuffer);
+    spiritSoundSource = audioCtx.createBufferSource();
+    const gainNode = audioCtx.createGain();
+    spiritSoundSource.buffer = decoded;
+    spiritSoundSource.loop = true;
+    gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+    gainNode.gain.linearRampToValueAtTime(0.6, audioCtx.currentTime + 1.5);
+    spiritSoundSource.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+    spiritSoundSource.start();
+}
+```
+ 
+**Red screen overlay** — I asked for the screen to turn red while the spirits are spelling to make it scarier. AI added a div that fades in when watch phase starts and fades out when the player's turn begins:
+```javascript
+spiritOverlay = document.createElement('div');
+spiritOverlay.style.cssText = 'position:fixed;inset:0;background:rgba(80,0,0,0.25);pointer-events:none;z-index:3;transition:opacity 1s;opacity:0;';
+document.body.appendChild(spiritOverlay);
+setTimeout(() => { spiritOverlay.style.opacity = '1'; }, 50);
+```
+ 
+**Removed wrong-letter popup** — AI originally showed a "WRONG" popup every time you hit the wrong letter. During normal tilting you constantly pass over letters so this was firing constantly and was very annoying. I removed it so wrong letters just shake the board silently — less annoying but still gives physical feedback.
+ 

@@ -6,6 +6,14 @@ let desktopId = null;
 let myStream = null;
 let buttonClicked = false;
 
+// Creates a full-screen flash overlay
+const createFlash = (color, duration) => {
+    const flash = document.createElement('div');
+    flash.style.cssText = `position:fixed;inset:0;background:${color};pointer-events:none;z-index:9999;transition:opacity ${duration}ms;`;
+    document.body.appendChild(flash);
+    setTimeout(() => { flash.style.opacity = '0'; setTimeout(() => flash.remove(), duration); }, 50);
+}
+
 if (roomId) {
     socket.on('connect', () => {
         console.log('Mobile connected:', socket.id);
@@ -44,11 +52,8 @@ if (roomId) {
                         void display.offsetWidth;
                         display.classList.add('pop');
                     }
-                    // full screen flash for iOS (no vibration support)
-                    const flash = document.createElement('div');
-                    flash.style.cssText = 'position:fixed;inset:0;background:rgba(212,175,55,0.18);pointer-events:none;z-index:9999;animation:flashFade 0.35s ease-out forwards;';
-                    document.body.appendChild(flash);
-                    setTimeout(() => flash.remove(), 350);
+                    // full screen gold flash for iOS (no vibration support)
+                    createFlash('rgba(212,175,55,0.18)', 350);
                 }
             } catch (e) { }
         });
@@ -84,7 +89,7 @@ if (roomId) {
         }
     });
 
-    function showFaceCaptureUI() {
+    const showFaceCaptureUI = () => {
         document.querySelector('#intro-ui').style.display = 'none';
         const faceUI = document.querySelector('#face-capture-ui');
         faceUI.style.display = 'flex';
@@ -99,11 +104,8 @@ if (roomId) {
         const preview = document.querySelector('#face-preview');
         preview.srcObject = null;
 
-        // Camera flash effect
-        const flash = document.createElement('div');
-        flash.style.cssText = 'position:fixed;inset:0;background:white;pointer-events:none;z-index:9999;transition:opacity 0.4s;';
-        document.body.appendChild(flash);
-        setTimeout(() => { flash.style.opacity = '0'; setTimeout(() => flash.remove(), 400); }, 50);
+        // White camera flash effect
+        createFlash('white', 400);
 
         // Connect peer and go to planchette
         buttonClicked = true;
@@ -116,16 +118,15 @@ if (roomId) {
         }, 300);
     });
 
-    function showPlanchetteUI() {
-        document.querySelector('#intro-ui').style.display = 'none';
+    const showPlanchetteUI = () => {
         const ui = document.querySelector('#planchette-ui');
         ui.style.display = 'flex';
         setTimeout(() => { ui.style.opacity = '1'; }, 10);
     }
 
-    function startMoving() {
+    const startMoving = () => {
+        const img = document.querySelector('#planchette-img');
         window.addEventListener('deviceorientation', (event) => {
-            const img = document.querySelector('#planchette-img');
             if (img) img.style.transform = `rotateY(${event.gamma}deg) rotateX(${-event.beta}deg)`;
             if (peer && peer.connected) {
                 peer.send(JSON.stringify({ x: event.gamma, y: event.beta }));
