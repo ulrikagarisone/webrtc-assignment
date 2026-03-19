@@ -1,18 +1,22 @@
 const socket = io.connect('/');
 const urlParams = new URLSearchParams(window.location.search);
 const roomId = urlParams.get('room');
+
+// Connection
 let peer;
 let desktopId = null;
+
+// Camera / stream
 let myStream = null;
 let buttonClicked = false;
 
-// Creates a full-screen flash overlay
+// Creates a full-screen flash overlay — used for letter feedback and photo capture
 const createFlash = (color, duration) => {
     const flash = document.createElement('div');
     flash.style.cssText = `position:fixed;inset:0;background:${color};pointer-events:none;z-index:9999;transition:opacity ${duration}ms;`;
     document.body.appendChild(flash);
     setTimeout(() => { flash.style.opacity = '0'; setTimeout(() => flash.remove(), duration); }, 50);
-}
+};
 
 if (roomId) {
     socket.on('connect', () => {
@@ -23,7 +27,6 @@ if (roomId) {
     socket.on('peer-joined', (phoneId) => {
         console.log('Desktop id received:', phoneId);
         desktopId = phoneId;
-        // only create peer if button already clicked and camera ready
         if (buttonClicked) createPeer(true, desktopId);
     });
 
@@ -33,14 +36,9 @@ if (roomId) {
 
     const createPeer = (initiator, peerId) => {
         console.log('Creating peer, stream:', myStream ? 'YES' : 'NO');
-        peer = new SimplePeer({
-            initiator,
-            stream: myStream || undefined
-        });
+        peer = new SimplePeer({ initiator, stream: myStream || undefined });
         peer.on('signal', data => { socket.emit('signal', peerId, data); });
-        peer.on('connect', () => {
-            console.log('CONNECTED!');
-        });
+        peer.on('connect', () => { console.log('CONNECTED!'); });
         peer.on('data', data => {
             try {
                 const msg = JSON.parse(data);
@@ -52,7 +50,6 @@ if (roomId) {
                         void display.offsetWidth;
                         display.classList.add('pop');
                     }
-                    // full screen gold flash for iOS (no vibration support)
                     createFlash('rgba(212,175,55,0.18)', 350);
                 }
             } catch (e) { }
@@ -73,7 +70,6 @@ if (roomId) {
             } catch (e) { console.log('motion permission error', e); }
         }
 
-        // Get camera and show face capture screen
         try {
             myStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
             console.log('Camera ready!');
@@ -81,7 +77,6 @@ if (roomId) {
         } catch (err) {
             console.log('Camera denied:', err.message);
             myStream = null;
-            // skip face capture if no camera
             buttonClicked = true;
             if (desktopId) createPeer(true, desktopId);
             showPlanchetteUI();
@@ -93,24 +88,14 @@ if (roomId) {
         document.querySelector('#intro-ui').style.display = 'none';
         const faceUI = document.querySelector('#face-capture-ui');
         faceUI.style.display = 'flex';
-
-        // Show live preview
-        const preview = document.querySelector('#face-preview');
-        preview.srcObject = myStream;
-    }
+        document.querySelector('#face-preview').srcObject = myStream;
+    };
 
     document.querySelector('#capture-btn').addEventListener('click', () => {
-        // Stop the preview — reuse same stream for peer, no second permission popup
-        const preview = document.querySelector('#face-preview');
-        preview.srcObject = null;
-
-        // White camera flash effect
+        document.querySelector('#face-preview').srcObject = null;
         createFlash('white', 400);
-
-        // Connect peer and go to planchette
         buttonClicked = true;
         if (desktopId) createPeer(true, desktopId);
-
         setTimeout(() => {
             document.querySelector('#face-capture-ui').style.display = 'none';
             showPlanchetteUI();
@@ -122,7 +107,7 @@ if (roomId) {
         const ui = document.querySelector('#planchette-ui');
         ui.style.display = 'flex';
         setTimeout(() => { ui.style.opacity = '1'; }, 10);
-    }
+    };
 
     const startMoving = () => {
         const img = document.querySelector('#planchette-img');
@@ -132,5 +117,5 @@ if (roomId) {
                 peer.send(JSON.stringify({ x: event.gamma, y: event.beta }));
             }
         });
-    }
+    };
 }

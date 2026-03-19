@@ -10,7 +10,7 @@ let prevX = currentX;
 let prevY = currentY;
 const friction = 0.02;
 
-// Peer connection
+// Peer
 let peer;
 
 // Ghost
@@ -30,15 +30,42 @@ let scrapeGain = null;
 let currentActiveLetter = null;
 
 // Game
+const SPIRIT_WORDS = ['DEATH', 'HAUNTED', 'BEWARE', 'CURSED', 'SHADOW', 'BLOOD', 'WICKED', 'DOOM', 'SPECTER', 'GRAVE'];
+const SPIRIT_QUESTIONS = [
+    {
+        question: 'ARE YOU ALONE?',
+        yes: { msg: 'YOU ARE NEVER ALONE', sub: 'i have been here all along... restarting', scary: true },
+        no: { msg: 'ARE YOU SURE?', sub: 'the spirits disagree... good bye for now', scary: false }
+    },
+    {
+        question: 'ARE YOU AFRAID?',
+        yes: { msg: 'GOOD', sub: 'fear keeps you alive... for now', scary: false },
+        no: { msg: 'YOU SHOULD BE', sub: 'the spirits are displeased... restarting', scary: true }
+    },
+    {
+        question: 'DO YOU FEEL SAFE?',
+        yes: { msg: 'HOW NAIVE', sub: 'safety is an illusion... restarting', scary: true },
+        no: { msg: 'WISE', sub: 'the spirits respect your honesty... good bye', scary: false }
+    },
+    {
+        question: 'IS SOMEONE WATCHING YOU?',
+        yes: { msg: 'CORRECT', sub: 'it has been watching you this whole time... good bye', scary: false },
+        no: { msg: 'LOOK BEHIND YOU', sub: 'you are not as alone as you think... restarting', scary: true }
+    }
+];
+const MAX_ROUNDS = 3;
 let targetWord = '';
 let collectedLetters = [];
-let gamePhase = 'idle'; // 'watching' | 'spelling' | 'idle'
+let gamePhase = 'idle'; // 'watching' | 'spelling' | 'idle' | 'question'
 let spiritSpellIndex = 0;
 let lastWrongLetter = null;
 let spiritSoundSource = null;
 let spiritOverlay = null;
+let currentRound = 0;
+let score = 0;
+let currentQuestion = null;
 
-// Helpers 
+// Helpers
 
 const getBoardBounds = () => {
     const r = document.querySelector('#board-wrap')?.getBoundingClientRect();
@@ -62,7 +89,7 @@ const loadSound = async (url) => {
     return audioCtx.decodeAudioData(buffer);
 };
 
-// Audio
+// Audio 
 
 const initAudio = async () => {
     if (audioCtx) return;
@@ -78,7 +105,28 @@ const initAudio = async () => {
     scrapeSource.start();
 };
 
-// Possession
+const playSpiritSound = async () => {
+    if (!audioCtx) return;
+    const decoded = await loadSound('/assets/possesd_sound.mp3');
+    spiritSoundSource = audioCtx.createBufferSource();
+    const gainNode = audioCtx.createGain();
+    spiritSoundSource.buffer = decoded;
+    spiritSoundSource.loop = true;
+    gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+    gainNode.gain.linearRampToValueAtTime(0.6, audioCtx.currentTime + 1.5);
+    spiritSoundSource.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+    spiritSoundSource.start();
+};
+
+const stopSpiritSound = () => {
+    if (spiritSoundSource) {
+        spiritSoundSource.stop();
+        spiritSoundSource = null;
+    }
+};
+
+// Possession 
 
 const showPossessionEffect = () => {
     const vignette = createOverlay('position:fixed;inset:0;background:radial-gradient(ellipse at center, transparent 30%, rgba(80,0,0,0.85) 100%);pointer-events:none;z-index:997;opacity:0;transition:opacity 0.8s;');
@@ -105,10 +153,7 @@ const movePossessedPlanchette = (onDone) => {
         elapsed += 500;
         targetX = minX + Math.random() * (maxX - minX);
         targetY = minY + Math.random() * (maxY - minY);
-        if (elapsed >= 6000) {
-            clearInterval(possessionInterval);
-            onDone();
-        }
+        if (elapsed >= 6000) { clearInterval(possessionInterval); onDone(); }
     }, 500);
 };
 
@@ -179,6 +224,8 @@ const createPeer = (initiator, peerId) => {
     peer.on('connect', () => {
         console.log('CONNECTED!');
         document.querySelector('#qr-canvas').style.display = 'none';
+        currentRound = 0;
+        score = 0;
         startGame();
     });
 
@@ -186,14 +233,13 @@ const createPeer = (initiator, peerId) => {
         try {
             const motion = JSON.parse(data);
             if (!possessed && gamePhase !== 'watching') {
-                targetX += motion.x * 2.5;
-                targetY += motion.y * 2.5;
+                targetX += motion.x * 1.6;
+                targetY += motion.y * 1.6;
             }
             targetX = Math.max(0, Math.min(window.innerWidth - 250, targetX));
             targetY = Math.max(0, Math.min(window.innerHeight - 250, targetY));
-            const intensity = Math.abs(motion.x) + Math.abs(motion.y);
             if (!ghostImage) trySnapshot();
-            if (intensity > 60) hauntScreen();
+            if (Math.abs(motion.x) + Math.abs(motion.y) > 60) hauntScreen();
         } catch (e) { }
     });
 
@@ -220,9 +266,7 @@ const buildGhostImage = ($video) => {
     canvas.height = H;
     const ctx = canvas.getContext('2d');
     const ghostReady = ghostSheet.complete && ghostSheet.naturalWidth > 0;
-
     if (ghostReady) ctx.drawImage(ghostSheet, 0, 0, W, H);
-
     const faceCX = W * 0.50, faceCY = H * 0.168;
     const faceRX = 52, faceRY = 58;
     ctx.save();
@@ -232,15 +276,25 @@ const buildGhostImage = ($video) => {
     ctx.filter = 'grayscale(0.8) contrast(1.1)';
     ctx.drawImage($video, faceCX - faceRX, faceCY - faceRY, faceRX * 2, faceRY * 2);
     ctx.restore();
-
     if (ghostReady) {
         ctx.globalAlpha = 0.25;
         ctx.drawImage(ghostSheet, 0, 0, W, H);
         ctx.globalAlpha = 1;
     }
-
     ghostImage = canvas.toDataURL('image/png');
     console.log('Ghost+face composite ready!');
+};
+
+const spawnSmoke = ($ghost) => {
+    const smoke = document.createElement('div');
+    smoke.classList.add('smoke');
+    const size = 50 + Math.random() * 70;
+    smoke.style.width = size + 'px';
+    smoke.style.height = size + 'px';
+    smoke.style.left = (parseFloat($ghost.style.left) + 120) + 'px';
+    smoke.style.top = (parseFloat($ghost.style.top) + 250) + 'px';
+    document.body.appendChild(smoke);
+    setTimeout(() => smoke.remove(), 1800);
 };
 
 const hauntScreen = () => {
@@ -251,7 +305,6 @@ const hauntScreen = () => {
     const startX = Math.random() > 0.5 ? -320 : window.innerWidth + 50;
     const startY = 60 + Math.random() * (window.innerHeight * 0.5);
     const endX = startX < 0 ? window.innerWidth + 320 : -320;
-    const endY = startY - 120;
     $ghost.style.transition = 'none';
     $ghost.style.left = startX + 'px';
     $ghost.style.top = startY + 'px';
@@ -259,8 +312,9 @@ const hauntScreen = () => {
     setTimeout(() => {
         $ghost.style.transition = 'left 3.5s ease-in-out, top 3.5s ease-in-out';
         $ghost.style.left = endX + 'px';
-        $ghost.style.top = endY + 'px';
+        $ghost.style.top = (startY - 120) + 'px';
     }, 50);
+    const smokeInterval = setInterval(() => spawnSmoke($ghost), 160);
     ghostCooldown = true;
     setTimeout(() => {
         $ghost.style.opacity = '0';
@@ -305,13 +359,13 @@ document.querySelectorAll('.yes-no-row span').forEach(span => {
 });
 
 const letterElements = [...document.querySelectorAll('.board-letter, .board-word')];
+const letterRects = letterElements.map(el => ({ el, r: el.getBoundingClientRect() }));
 
 const checkLetterHover = () => {
     const px = currentX + 125;
     const py = currentY + 40;
     let found = null;
-    letterElements.forEach(el => {
-        const r = el.getBoundingClientRect();
+    letterRects.forEach(({ el, r }) => {
         if (px >= r.left - 8 && px <= r.right + 8 && py >= r.top - 8 && py <= r.bottom + 8) {
             found = el.dataset.letter;
         }
@@ -322,6 +376,13 @@ const checkLetterHover = () => {
             document.querySelector(`[data-letter="${found}"]`).classList.add('active');
             if (peer && peer.connected) {
                 peer.send(JSON.stringify({ type: 'letter', value: found }));
+                if (found === 'YES' || found === 'NO') {
+                    if (gamePhase === 'question') {
+                        answerSpiritQuestion(found);
+                    } else if (found === 'YES' && !ghostCooldown && ghostImage) {
+                        hauntScreen();
+                    }
+                }
                 if (gamePhase === 'spelling') checkGameLetter(found);
             }
             console.log('Letter:', found);
@@ -331,8 +392,6 @@ const checkLetterHover = () => {
 };
 
 // Game Logic
-
-const SPIRIT_WORDS = ['DEATH', 'HAUNTED', 'BEWARE', 'CURSED', 'SHADOW', 'BLOOD', 'WICKED', 'DOOM', 'SPECTER', 'GRAVE'];
 
 const showPopup = (title, sub = '', duration = 0) => {
     document.querySelector('#popup-title').textContent = title;
@@ -354,35 +413,54 @@ const renderWordDisplay = () => {
     }).join('');
 };
 
-const playSpiritSound = async () => {
-    if (!audioCtx) return;
-    const decoded = await loadSound('/assets/possesd_sound.mp3');
-    spiritSoundSource = audioCtx.createBufferSource();
-    const gainNode = audioCtx.createGain();
-    spiritSoundSource.buffer = decoded;
-    spiritSoundSource.loop = true;
-    gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
-    gainNode.gain.linearRampToValueAtTime(0.6, audioCtx.currentTime + 1.5);
-    spiritSoundSource.connect(gainNode);
-    gainNode.connect(audioCtx.destination);
-    spiritSoundSource.start();
+const endGame = () => {
+    gamePhase = 'question';
+    currentQuestion = SPIRIT_QUESTIONS[Math.floor(Math.random() * SPIRIT_QUESTIONS.length)];
+    showPopup('✦ THE SÉANCE IS COMPLETE ✦', `you communicated ${score} of ${MAX_ROUNDS} words`);
+    setTimeout(() => {
+        hidePopup();
+        setTimeout(() => {
+            showPopup('ONE FINAL QUESTION', 'answer with YES or NO on the board');
+            setTimeout(() => {
+                hidePopup();
+                showPopup(currentQuestion.question, 'move the planchette to YES or NO');
+            }, 3000);
+        }, 1000);
+    }, 3000);
 };
 
-const stopSpiritSound = () => {
-    if (spiritSoundSource) {
-        spiritSoundSource.stop();
-        spiritSoundSource = null;
-    }
+const answerSpiritQuestion = (answer) => {
+    if (gamePhase !== 'question' || !currentQuestion) return;
+    gamePhase = 'idle';
+    hidePopup();
+    const response = answer === 'YES' ? currentQuestion.yes : currentQuestion.no;
+    currentQuestion = null;
+    setTimeout(() => {
+        showPopup(response.msg, response.sub);
+        if (response.scary) {
+            triggerPossession();
+            hauntScreen();
+            setTimeout(() => { hidePopup(); currentRound = 0; score = 0; startGame(); }, 8000);
+        } else {
+            setTimeout(() => {
+                hidePopup();
+                showPopup('G O O D  B Y E', 'the spirits have departed', 3000);
+                setTimeout(() => { currentRound = 0; score = 0; startGame(); }, 4000);
+            }, 3000);
+        }
+    }, 500);
 };
 
 const startGame = () => {
+    currentRound++;
+    if (currentRound > MAX_ROUNDS) { endGame(); return; }
     targetWord = SPIRIT_WORDS[Math.floor(Math.random() * SPIRIT_WORDS.length)];
     collectedLetters = [];
     lastWrongLetter = null;
     gamePhase = 'watching';
     spiritSpellIndex = 0;
     renderWordDisplay();
-    showPopup('THE SPIRITS HAVE A MESSAGE', 'watch carefully...');
+    showPopup(`ROUND ${currentRound} OF ${MAX_ROUNDS}`, 'the spirits have a message — watch carefully...');
     setTimeout(() => {
         hidePopup();
         spiritOverlay = createOverlay('position:fixed;inset:0;background:rgba(80,0,0,0.25);pointer-events:none;z-index:3;transition:opacity 1s;opacity:0;');
@@ -437,8 +515,9 @@ const checkGameLetter = (letter) => {
         renderWordDisplay();
         if (collectedLetters.length === targetWord.length) {
             gamePhase = 'idle';
-            showPopup('✦ THE SPIRITS ARE PLEASED ✦', 'you have communicated', 4000);
-            setTimeout(() => { hauntScreen(); setTimeout(startGame, 6000); }, 800);
+            score++;
+            showPopup('✦ THE SPIRITS ARE PLEASED ✦', `round ${currentRound} of ${MAX_ROUNDS} complete`, 2500);
+            setTimeout(() => { hauntScreen(); setTimeout(startGame, 5000); }, 800);
         }
     } else {
         lastWrongLetter = letter;
@@ -456,14 +535,12 @@ const shakeBoard = () => {
     }, 80);
 };
 
-// Animation loopgi
+// Animation loop 
 
-const animate = () => {
+const init = () => {
     currentX += (targetX - currentX) * friction;
     currentY += (targetY - currentY) * friction;
-    const vx = currentX - prevX;
-    const vy = currentY - prevY;
-    const speed = Math.sqrt(vx * vx + vy * vy);
+    const speed = Math.sqrt((currentX - prevX) ** 2 + (currentY - prevY) ** 2);
     prevX = currentX;
     prevY = currentY;
     if (scrapeGain && audioCtx) {
@@ -475,6 +552,7 @@ const animate = () => {
         planchette.style.top = `${currentY}px`;
     }
     checkLetterHover();
-    requestAnimationFrame(animate);
+    requestAnimationFrame(init);
 };
-animate();
+
+init();
