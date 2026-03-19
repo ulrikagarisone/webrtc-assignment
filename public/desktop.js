@@ -19,7 +19,6 @@ let ghostCooldown = false;
 
 // Possession
 let possessed = false;
-let possessionInterval = null;
 
 // Audio
 let audioCtx = null;
@@ -66,16 +65,6 @@ let score = 0;
 let currentQuestion = null;
 
 // Helpers 
-
-const getBoardBounds = () => {
-    const r = document.querySelector('#board-wrap')?.getBoundingClientRect();
-    return {
-        minX: r ? r.left + 40 : 100,
-        maxX: r ? r.right - 290 : window.innerWidth - 290,
-        minY: r ? r.top + 40 : 100,
-        maxY: r ? r.bottom - 290 : window.innerHeight - 290
-    };
-};
 
 const createOverlay = (css) => {
     const el = document.createElement('div');
@@ -161,16 +150,7 @@ const shakeBoardTitle = () => {
     }, 80);
 };
 
-const movePossessedPlanchette = (onDone) => {
-    let elapsed = 0;
-    const { minX, maxX, minY, maxY } = getBoardBounds();
-    possessionInterval = setInterval(() => {
-        elapsed += 500;
-        targetX = minX + Math.random() * (maxX - minX);
-        targetY = minY + Math.random() * (maxY - minY);
-        if (elapsed >= 6000) { clearInterval(possessionInterval); onDone(); }
-    }, 500);
-};
+
 
 const triggerPossession = async () => {
     if (possessed) return;
@@ -186,7 +166,7 @@ const triggerPossession = async () => {
                 source.buffer = decoded;
                 gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
                 gainNode.gain.linearRampToValueAtTime(0.9, audioCtx.currentTime + 0.5);
-                gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 6);
+                gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 4);
                 source.connect(gainNode);
                 gainNode.connect(audioCtx.destination);
                 source.start();
@@ -195,11 +175,11 @@ const triggerPossession = async () => {
             console.log('possession sound failed', e);
         }
     }
-    movePossessedPlanchette(() => {
+    setTimeout(() => {
         vignette.style.opacity = '0';
         setTimeout(() => { vignette.remove(); flash.remove(); }, 1000);
         possessed = false;
-    });
+    }, 4000);
 };
 
 // Socket and peer 
@@ -558,7 +538,7 @@ const shakeBoard = () => {
     }, 80);
 };
 
-// Animation loop
+// Animation loop 
 
 const init = () => {
     currentX += (targetX - currentX) * friction;
