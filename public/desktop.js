@@ -65,7 +65,7 @@ let currentRound = 0;
 let score = 0;
 let currentQuestion = null;
 
-// Helpers
+// Helpers 
 
 const getBoardBounds = () => {
     const r = document.querySelector('#board-wrap')?.getBoundingClientRect();
@@ -85,38 +85,53 @@ const createOverlay = (css) => {
 };
 
 const loadSound = async (url) => {
-    const buffer = await (await fetch(url)).arrayBuffer();
-    return audioCtx.decodeAudioData(buffer);
+    try {
+        const buffer = await (await fetch(url)).arrayBuffer();
+        return audioCtx.decodeAudioData(buffer);
+    } catch (e) {
+        console.log('loadSound failed for', url, e);
+        return null;
+    }
 };
 
 // Audio 
 
 const initAudio = async () => {
     if (audioCtx) return;
-    audioCtx = new AudioContext();
-    const decoded = await loadSound('/assets/wood_scrape.mp3');
-    scrapeSource = audioCtx.createBufferSource();
-    scrapeSource.buffer = decoded;
-    scrapeSource.loop = true;
-    scrapeGain = audioCtx.createGain();
-    scrapeGain.gain.value = 0;
-    scrapeSource.connect(scrapeGain);
-    scrapeGain.connect(audioCtx.destination);
-    scrapeSource.start();
+    try {
+        audioCtx = new AudioContext();
+        const decoded = await loadSound('/assets/wood_scrape.mp3');
+        if (!decoded) return;
+        scrapeSource = audioCtx.createBufferSource();
+        scrapeSource.buffer = decoded;
+        scrapeSource.loop = true;
+        scrapeGain = audioCtx.createGain();
+        scrapeGain.gain.value = 0;
+        scrapeSource.connect(scrapeGain);
+        scrapeGain.connect(audioCtx.destination);
+        scrapeSource.start();
+    } catch (e) {
+        console.log('initAudio failed', e);
+    }
 };
 
 const playSpiritSound = async () => {
     if (!audioCtx) return;
-    const decoded = await loadSound('/assets/possesd_sound.mp3');
-    spiritSoundSource = audioCtx.createBufferSource();
-    const gainNode = audioCtx.createGain();
-    spiritSoundSource.buffer = decoded;
-    spiritSoundSource.loop = true;
-    gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
-    gainNode.gain.linearRampToValueAtTime(0.6, audioCtx.currentTime + 1.5);
-    spiritSoundSource.connect(gainNode);
-    gainNode.connect(audioCtx.destination);
-    spiritSoundSource.start();
+    try {
+        const decoded = await loadSound('/assets/possesd_sound.mp3');
+        if (!decoded) return;
+        spiritSoundSource = audioCtx.createBufferSource();
+        const gainNode = audioCtx.createGain();
+        spiritSoundSource.buffer = decoded;
+        spiritSoundSource.loop = true;
+        gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+        gainNode.gain.linearRampToValueAtTime(0.6, audioCtx.currentTime + 1.5);
+        spiritSoundSource.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        spiritSoundSource.start();
+    } catch (e) {
+        console.log('playSpiritSound failed', e);
+    }
 };
 
 const stopSpiritSound = () => {
@@ -163,16 +178,22 @@ const triggerPossession = async () => {
     const { vignette, flash } = showPossessionEffect();
     shakeBoardTitle();
     if (audioCtx) {
-        const decoded = await loadSound('/assets/possesd_sound.mp3');
-        const source = audioCtx.createBufferSource();
-        const gainNode = audioCtx.createGain();
-        source.buffer = decoded;
-        gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
-        gainNode.gain.linearRampToValueAtTime(0.9, audioCtx.currentTime + 0.5);
-        gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 6);
-        source.connect(gainNode);
-        gainNode.connect(audioCtx.destination);
-        source.start();
+        try {
+            const decoded = await loadSound('/assets/possesd_sound.mp3');
+            if (decoded) {
+                const source = audioCtx.createBufferSource();
+                const gainNode = audioCtx.createGain();
+                source.buffer = decoded;
+                gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+                gainNode.gain.linearRampToValueAtTime(0.9, audioCtx.currentTime + 0.5);
+                gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 6);
+                source.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+                source.start();
+            }
+        } catch (e) {
+            console.log('possession sound failed', e);
+        }
     }
     movePossessedPlanchette(() => {
         vignette.style.opacity = '0';
@@ -181,7 +202,7 @@ const triggerPossession = async () => {
     });
 };
 
-// Socket and peer
+// Socket and peer 
 
 socket.on('connect', () => {
     console.log('Desktop connected:', socket.id);
@@ -190,8 +211,8 @@ socket.on('connect', () => {
     QRCode.toCanvas(document.querySelector('#qr-canvas'), url);
 });
 
-document.querySelector('#begin-btn').addEventListener('click', () => {
-    initAudio();
+document.querySelector('#begin-btn').addEventListener('click', async () => {
+    await initAudio();
     const screen = document.querySelector('#start-screen');
     screen.style.opacity = '0';
     setTimeout(() => { screen.style.display = 'none'; }, 1000);
@@ -240,7 +261,9 @@ const createPeer = (initiator, peerId) => {
             targetY = Math.max(0, Math.min(window.innerHeight - 250, targetY));
             if (!ghostImage) trySnapshot();
             if (Math.abs(motion.x) + Math.abs(motion.y) > 60) hauntScreen();
-        } catch (e) { }
+        } catch (e) {
+            console.log('data parse error', e);
+        }
     });
 
     peer.on('close', () => { peer = null; });
@@ -323,7 +346,7 @@ const hauntScreen = () => {
     }, 3500);
 };
 
-// Letter detection
+// Letter detection 
 
 const glowStyle = document.createElement('style');
 glowStyle.textContent = `
@@ -391,7 +414,7 @@ const checkLetterHover = () => {
     }
 };
 
-// Game Logic
+// Game logic
 
 const showPopup = (title, sub = '', duration = 0) => {
     document.querySelector('#popup-title').textContent = title;
@@ -535,7 +558,7 @@ const shakeBoard = () => {
     }, 80);
 };
 
-// Animation loop 
+// Animation loop
 
 const init = () => {
     currentX += (targetX - currentX) * friction;
@@ -554,5 +577,4 @@ const init = () => {
     checkLetterHover();
     requestAnimationFrame(init);
 };
-
 init();
