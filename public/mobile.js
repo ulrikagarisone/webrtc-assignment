@@ -36,7 +36,11 @@ if (roomId) {
 
     const createPeer = (initiator, peerId) => {
         console.log('Creating peer, stream:', myStream ? 'YES' : 'NO');
-        peer = new SimplePeer({ initiator, stream: myStream || undefined });
+        peer = new SimplePeer({
+            initiator,
+            stream: myStream || undefined,
+            config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
+        });
         peer.on('signal', data => { socket.emit('signal', peerId, data); });
         peer.on('connect', () => { console.log('CONNECTED!'); });
         peer.on('data', data => {

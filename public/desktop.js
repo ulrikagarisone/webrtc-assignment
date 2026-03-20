@@ -208,7 +208,10 @@ socket.on('signal', (_myId, signal, peerId) => {
 });
 
 const createPeer = (initiator, peerId) => {
-    peer = new SimplePeer({ initiator });
+    peer = new SimplePeer({
+        initiator,
+        config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
+    });
 
     peer.on('stream', stream => {
         console.log('Stream received!');
