@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
     <title>Ouija Board</title>
@@ -36,7 +36,7 @@
             filter: invert(1) sepia(1) saturate(2) hue-rotate(5deg);
         }
 
-        /* ── START SCREEN ── */
+        /* START SCREEN */
         #start-screen {
             position: fixed;
             inset: 0;
@@ -122,7 +122,7 @@
             background: rgba(212, 175, 55, 0.08);
         }
 
-        /* ── BOARD ── */
+        /* BOARD */
         #board-wrap {
             position: fixed;
             inset: 0;
@@ -246,7 +246,7 @@
             width: 100%;
         }
 
-        /* ── Game UI ── */
+        /* Game UI */
         #game-ui {
             position: fixed;
             bottom: 30px;
@@ -259,60 +259,7 @@
             z-index: 10;
             pointer-events: none;
         }
-
-        #word-display {
-            display: flex;
-            gap: clamp(8px, 1.5vw, 20px);
-            font-family: 'Cinzel', serif;
-            font-size: clamp(1.8rem, 3vw, 3rem);
-            letter-spacing: 0.2em;
-        }
-
-        .word-slot {
-            color: rgba(212, 175, 55, 0.25);
-            border-bottom: 2px solid rgba(212, 175, 55, 0.3);
-            min-width: 1.2em;
-            text-align: center;
-            transition: all 0.3s ease;
-        }
-
-        .word-slot.revealed {
-            color: #fff8dc;
-            text-shadow: 0 0 15px rgba(255, 220, 100, 0.9), 0 0 30px rgba(255, 180, 0, 0.5);
-            border-bottom-color: #d4af37;
-            animation: letterReveal 0.4s ease-out;
-        }
-
-        @keyframes letterReveal {
-            0% {
-                transform: scale(1.8);
-                opacity: 0;
-            }
-
-            100% {
-                transform: scale(1);
-                opacity: 1;
-            }
-        }
-
-        #game-lives {
-            font-family: 'Cinzel', serif;
-            font-size: 1.4rem;
-            letter-spacing: 0.4em;
-            color: #d4af37;
-            opacity: 0.7;
-        }
-
-        #game-hint {
-            font-family: 'Cinzel', serif;
-            font-size: clamp(0.7rem, 1.2vw, 1rem);
-            letter-spacing: 0.3em;
-            color: rgba(212, 175, 55, 0.6);
-            text-transform: uppercase;
-            opacity: 0;
-            transition: opacity 0.4s ease;
-        }
-
+        
         /* Good bye */
         .goodbye-row {
             font-family: 'Cinzel Decorative', serif;
@@ -323,7 +270,7 @@
             text-transform: uppercase;
         }
 
-        /* ── QR ── */
+        /* QR  */
         #qr-canvas {
             position: fixed;
             bottom: 20px;
@@ -335,7 +282,7 @@
             z-index: 10;
         }
 
-        /* ── PLANCHETTE ── */
+        /* PLANCHETTE */
         #planchette {
             position: absolute;
             width: 250px;
@@ -409,7 +356,7 @@
             display: none;
         }
 
-        /* ── GAME POPUP ── */
+        /* GAME POPUP */
         #game-popup {
             position: fixed;
             top: 50%;
@@ -471,16 +418,7 @@
             font-style: italic;
         }
 
-        /* ── WORD DISPLAY ── */
-        #game-ui {
-            position: fixed;
-            bottom: 28px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 10;
-            pointer-events: none;
-        }
-
+        /* WORD DISPLAY */
         #word-display {
             display: flex;
             gap: clamp(8px, 1.5vw, 20px);
@@ -492,7 +430,6 @@
 
         .word-slot {
             color: rgba(212, 175, 55, 0.2);
-            border-bottom: 2px solid rgba(212, 175, 55, 0.25);
             min-width: 1.1em;
             text-align: center;
             transition: all 0.3s ease;
@@ -565,7 +502,7 @@
 
     <canvas id="qr-canvas"></canvas>
     <div id="planchette">
-        <img src="/assets/heart_teller.png" alt="planchette">
+        <img src="/assets/heart_teller.png" id="planchette-img" alt="planchette">
     </div>
     <div id="ghost-container">
         <div id="ghost-face-img"></div>
@@ -573,7 +510,9 @@
     <video id="otherCamera" playsinline autoplay muted></video>
 
     <script src="/socket.io/socket.io.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/simple-peer/9.11.1/simplepeer.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/simple-peer/9.11.1/simplepeer.min.js"
+        integrity="sha512-0f7Ahsuvr+/P2btTY4mZIw9Vl23lS6LY/Y7amdkmUg2dqsUF+cTe4QjWvj/NIBHJoGksOiqndKQuI9yzn2hB0g=="
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
     <script src="desktop.js"></script>
 </body>

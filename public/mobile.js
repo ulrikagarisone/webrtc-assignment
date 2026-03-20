@@ -34,49 +34,76 @@ if (roomId) {
         if (peer) peer.signal(signal);
     });
 
+    // whichever arrives last (camera or desktop id) triggers the peer connection
+    // buttonClicked flag ensures stream is ready before creating peer
     const createPeer = (initiator, peerId) => {
         console.log('Creating peer, stream:', myStream ? 'YES' : 'NO');
-        peer = new SimplePeer({ initiator, stream: myStream || undefined });
+        peer = new SimplePeer({
+            initiator,
+            stream: myStream || undefined,
+            config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
+        });
         peer.on('signal', data => { socket.emit('signal', peerId, data); });
         peer.on('connect', () => { console.log('CONNECTED!'); });
         peer.on('data', data => {
             try {
                 const msg = JSON.parse(data);
-                if (msg.type === 'letter') {
-                    const display = document.querySelector('#letter-display');
-                    if (display) {
-                        display.textContent = msg.value;
-                        display.classList.remove('pop');
-                        void display.offsetWidth;
-                        display.classList.add('pop');
-                    }
-                    createFlash('rgba(212,175,55,0.18)', 350);
-                }
-            } catch (e) { }
+                if (msg.type !== 'letter') return;
+                const display = document.querySelector('#letter-display');
+                if (!display) return;
+                display.textContent = msg.value;
+                display.classList.remove('pop');
+                void display.offsetWidth;
+                display.classList.add('pop');
+                createFlash('rgba(212,175,55,0.18)', 350);
+            } catch (e) {
+                console.log('data error', e);
+            }
         });
         peer.on('close', () => { peer = null; });
-        peer.on('error', (e) => console.log('error', e));
+        peer.on('error', (e) => console.log('peer error', e));
+    };
+
+    const requestMotionPermission = async () => {
+        if (typeof DeviceOrientationEvent === 'undefined') return true;
+        if (typeof DeviceOrientationEvent.requestPermission !== 'function') return true;
+        try {
+            const state = await DeviceOrientationEvent.requestPermission();
+            return state === 'granted';
+        } catch (e) {
+            console.log('motion permission error', e);
+            return false;
+        }
+    };
+
+    const requestCamera = async () => {
+        try {
+            myStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
+            console.log('Camera ready!');
+            return true;
+        } catch (err) {
+            console.log('Camera denied:', err.message);
+            myStream = null;
+            return false;
+        }
     };
 
     document.querySelector('#start').addEventListener('click', async () => {
         document.querySelector('#start').style.display = 'none';
 
-        // Motion permission MUST be first — iOS loses gesture context after any await
-        if (typeof DeviceOrientationEvent !== 'undefined' &&
-            typeof DeviceOrientationEvent.requestPermission === 'function') {
-            try {
-                const state = await DeviceOrientationEvent.requestPermission();
-                if (state !== 'granted') { alert('Motion permission denied!'); return; }
-            } catch (e) { console.log('motion permission error', e); }
+        // Motion permission first. iOS loses gesture context after any await
+        const motionGranted = await requestMotionPermission();
+        if (!motionGranted) {
+            alert('Motion permission is required to play.');
+            document.querySelector('#start').style.display = 'block';
+            return;
         }
 
-        try {
-            myStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
-            console.log('Camera ready!');
+        const cameraGranted = await requestCamera();
+        if (cameraGranted) {
             showFaceCaptureUI();
-        } catch (err) {
-            console.log('Camera denied:', err.message);
-            myStream = null;
+        } else {
+            // Camera denied — skip face capture and go straight to planchette
             buttonClicked = true;
             if (desktopId) createPeer(true, desktopId);
             showPlanchetteUI();

@@ -16,10 +16,10 @@ let peer;
 // Ghost
 let ghostImage = null;
 let ghostCooldown = false;
+const ghostSheet = new Image(); 
 
 // Possession
 let possessed = false;
-let possessionInterval = null;
 
 // Audio
 let audioCtx = null;
@@ -65,17 +65,7 @@ let currentRound = 0;
 let score = 0;
 let currentQuestion = null;
 
-// Helpers
-
-const getBoardBounds = () => {
-    const r = document.querySelector('#board-wrap')?.getBoundingClientRect();
-    return {
-        minX: r ? r.left + 40 : 100,
-        maxX: r ? r.right - 290 : window.innerWidth - 290,
-        minY: r ? r.top + 40 : 100,
-        maxY: r ? r.bottom - 290 : window.innerHeight - 290
-    };
-};
+// Helpers 
 
 const createOverlay = (css) => {
     const el = document.createElement('div');
@@ -85,38 +75,52 @@ const createOverlay = (css) => {
 };
 
 const loadSound = async (url) => {
-    const buffer = await (await fetch(url)).arrayBuffer();
-    return audioCtx.decodeAudioData(buffer);
+    try {
+        const buffer = await (await fetch(url)).arrayBuffer();
+        return audioCtx.decodeAudioData(buffer);
+    } catch (e) {
+        console.log('loadSound failed for', url, e);
+        return null;
+    }
 };
 
 // Audio 
-
 const initAudio = async () => {
     if (audioCtx) return;
-    audioCtx = new AudioContext();
-    const decoded = await loadSound('/assets/wood_scrape.mp3');
-    scrapeSource = audioCtx.createBufferSource();
-    scrapeSource.buffer = decoded;
-    scrapeSource.loop = true;
-    scrapeGain = audioCtx.createGain();
-    scrapeGain.gain.value = 0;
-    scrapeSource.connect(scrapeGain);
-    scrapeGain.connect(audioCtx.destination);
-    scrapeSource.start();
+    try {
+        audioCtx = new AudioContext();
+        const decoded = await loadSound('/assets/wood_scrape.mp3');
+        if (!decoded) return;
+        scrapeSource = audioCtx.createBufferSource();
+        scrapeSource.buffer = decoded;
+        scrapeSource.loop = true;
+        scrapeGain = audioCtx.createGain();
+        scrapeGain.gain.value = 0;
+        scrapeSource.connect(scrapeGain);
+        scrapeGain.connect(audioCtx.destination);
+        scrapeSource.start();
+    } catch (e) {
+        console.log('initAudio failed', e);
+    }
 };
 
 const playSpiritSound = async () => {
     if (!audioCtx) return;
-    const decoded = await loadSound('/assets/possesd_sound.mp3');
-    spiritSoundSource = audioCtx.createBufferSource();
-    const gainNode = audioCtx.createGain();
-    spiritSoundSource.buffer = decoded;
-    spiritSoundSource.loop = true;
-    gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
-    gainNode.gain.linearRampToValueAtTime(0.6, audioCtx.currentTime + 1.5);
-    spiritSoundSource.connect(gainNode);
-    gainNode.connect(audioCtx.destination);
-    spiritSoundSource.start();
+    try {
+        const decoded = await loadSound('/assets/possesd_sound.mp3');
+        if (!decoded) return;
+        spiritSoundSource = audioCtx.createBufferSource();
+        const gainNode = audioCtx.createGain();
+        spiritSoundSource.buffer = decoded;
+        spiritSoundSource.loop = true;
+        gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+        gainNode.gain.linearRampToValueAtTime(0.6, audioCtx.currentTime + 1.5);
+        spiritSoundSource.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        spiritSoundSource.start();
+    } catch (e) {
+        console.log('playSpiritSound failed', e);
+    }
 };
 
 const stopSpiritSound = () => {
@@ -127,62 +131,52 @@ const stopSpiritSound = () => {
 };
 
 // Possession 
-
 const showPossessionEffect = () => {
-    const vignette = createOverlay('position:fixed;inset:0;background:radial-gradient(ellipse at center, transparent 30%, rgba(80,0,0,0.85) 100%);pointer-events:none;z-index:997;opacity:0;transition:opacity 0.8s;');
+    const vignetteCSS = 'position:fixed;inset:0;pointer-events:none;z-index:997;opacity:0;transition:opacity 0.8s;' +
+        'background:radial-gradient(ellipse at center, transparent 30%, rgba(80,0,0,0.85) 100%);';
+
+    const flashCSS = 'position:fixed;inset:0;pointer-events:none;z-index:998;transition:opacity 1.2s;' +
+        'background:rgba(140,0,0,0.4);';
+
+    const vignette = createOverlay(vignetteCSS);
+    const flash = createOverlay(flashCSS);
+
     setTimeout(() => { vignette.style.opacity = '1'; }, 50);
-    const flash = createOverlay('position:fixed;inset:0;background:rgba(140,0,0,0.4);pointer-events:none;z-index:998;transition:opacity 1.2s;');
     setTimeout(() => { flash.style.opacity = '0'; }, 200);
+
     return { vignette, flash };
-};
-
-const shakeBoardTitle = () => {
-    const title = document.querySelector('#board-title');
-    if (!title) return;
-    let shakes = 0;
-    const iv = setInterval(() => {
-        title.style.transform = `translate(${(Math.random() - 0.5) * 12}px,${(Math.random() - 0.5) * 8}px)`;
-        if (++shakes > 10) { clearInterval(iv); title.style.transform = ''; }
-    }, 80);
-};
-
-const movePossessedPlanchette = (onDone) => {
-    let elapsed = 0;
-    const { minX, maxX, minY, maxY } = getBoardBounds();
-    possessionInterval = setInterval(() => {
-        elapsed += 500;
-        targetX = minX + Math.random() * (maxX - minX);
-        targetY = minY + Math.random() * (maxY - minY);
-        if (elapsed >= 6000) { clearInterval(possessionInterval); onDone(); }
-    }, 500);
 };
 
 const triggerPossession = async () => {
     if (possessed) return;
     possessed = true;
     const { vignette, flash } = showPossessionEffect();
-    shakeBoardTitle();
     if (audioCtx) {
-        const decoded = await loadSound('/assets/possesd_sound.mp3');
-        const source = audioCtx.createBufferSource();
-        const gainNode = audioCtx.createGain();
-        source.buffer = decoded;
-        gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
-        gainNode.gain.linearRampToValueAtTime(0.9, audioCtx.currentTime + 0.5);
-        gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 6);
-        source.connect(gainNode);
-        gainNode.connect(audioCtx.destination);
-        source.start();
+        try {
+            const decoded = await loadSound('/assets/possesd_sound.mp3');
+            if (decoded) {
+                const source = audioCtx.createBufferSource();
+                const gainNode = audioCtx.createGain();
+                source.buffer = decoded;
+                gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+                gainNode.gain.linearRampToValueAtTime(0.9, audioCtx.currentTime + 0.5);
+                gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 4);
+                source.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+                source.start();
+            }
+        } catch (e) {
+            console.log('possession sound failed', e);
+        }
     }
-    movePossessedPlanchette(() => {
+    setTimeout(() => {
         vignette.style.opacity = '0';
         setTimeout(() => { vignette.remove(); flash.remove(); }, 1000);
         possessed = false;
-    });
+    }, 4000);
 };
 
-// Socket and peer
-
+// Socket and peer 
 socket.on('connect', () => {
     console.log('Desktop connected:', socket.id);
     socket.emit('join', roomId);
@@ -190,8 +184,8 @@ socket.on('connect', () => {
     QRCode.toCanvas(document.querySelector('#qr-canvas'), url);
 });
 
-document.querySelector('#begin-btn').addEventListener('click', () => {
-    initAudio();
+document.querySelector('#begin-btn').addEventListener('click', async () => {
+    await initAudio();
     const screen = document.querySelector('#start-screen');
     screen.style.opacity = '0';
     setTimeout(() => { screen.style.display = 'none'; }, 1000);
@@ -207,7 +201,10 @@ socket.on('signal', (_myId, signal, peerId) => {
 });
 
 const createPeer = (initiator, peerId) => {
-    peer = new SimplePeer({ initiator });
+    peer = new SimplePeer({
+        initiator,
+        config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
+    });
 
     peer.on('stream', stream => {
         console.log('Stream received!');
@@ -233,14 +230,16 @@ const createPeer = (initiator, peerId) => {
         try {
             const motion = JSON.parse(data);
             if (!possessed && gamePhase !== 'watching') {
-                targetX += motion.x * 1.6;
-                targetY += motion.y * 1.6;
+                targetX += motion.x;
+                targetY += motion.y;
             }
             targetX = Math.max(0, Math.min(window.innerWidth - 250, targetX));
             targetY = Math.max(0, Math.min(window.innerHeight - 250, targetY));
             if (!ghostImage) trySnapshot();
             if (Math.abs(motion.x) + Math.abs(motion.y) > 60) hauntScreen();
-        } catch (e) { }
+        } catch (e) {
+            console.log('data parse error', e);
+        }
     });
 
     peer.on('close', () => { peer = null; });
@@ -248,8 +247,6 @@ const createPeer = (initiator, peerId) => {
 };
 
 // Ghost
-
-const ghostSheet = new Image();
 ghostSheet.src = '/assets/ghost.png';
 ghostSheet.onload = () => console.log('Ghost sheet loaded');
 
@@ -285,18 +282,6 @@ const buildGhostImage = ($video) => {
     console.log('Ghost+face composite ready!');
 };
 
-const spawnSmoke = ($ghost) => {
-    const smoke = document.createElement('div');
-    smoke.classList.add('smoke');
-    const size = 50 + Math.random() * 70;
-    smoke.style.width = size + 'px';
-    smoke.style.height = size + 'px';
-    smoke.style.left = (parseFloat($ghost.style.left) + 120) + 'px';
-    smoke.style.top = (parseFloat($ghost.style.top) + 250) + 'px';
-    document.body.appendChild(smoke);
-    setTimeout(() => smoke.remove(), 1800);
-};
-
 const hauntScreen = () => {
     if (ghostCooldown || !ghostImage) return;
     const $ghost = document.querySelector('#ghost-container');
@@ -314,17 +299,14 @@ const hauntScreen = () => {
         $ghost.style.left = endX + 'px';
         $ghost.style.top = (startY - 120) + 'px';
     }, 50);
-    const smokeInterval = setInterval(() => spawnSmoke($ghost), 160);
     ghostCooldown = true;
     setTimeout(() => {
         $ghost.style.opacity = '0';
-        clearInterval(smokeInterval);
         setTimeout(() => { ghostCooldown = false; }, 500);
     }, 3500);
 };
 
-// Letter detection
-
+// Letter detection 
 const glowStyle = document.createElement('style');
 glowStyle.textContent = `
     .board-letter, .board-word {
@@ -358,7 +340,9 @@ document.querySelectorAll('.yes-no-row span').forEach(span => {
     span.classList.add('board-word');
 });
 
+// cached after spans are built
 const letterElements = [...document.querySelectorAll('.board-letter, .board-word')];
+// cached at startup, board never moves so positions stay valid
 const letterRects = letterElements.map(el => ({ el, r: el.getBoundingClientRect() }));
 
 const checkLetterHover = () => {
@@ -391,8 +375,7 @@ const checkLetterHover = () => {
     }
 };
 
-// Game Logic
-
+// Game logic
 const showPopup = (title, sub = '', duration = 0) => {
     document.querySelector('#popup-title').textContent = title;
     document.querySelector('#popup-sub').textContent = sub;
@@ -407,7 +390,7 @@ const hidePopup = () => {
 const renderWordDisplay = () => {
     const display = document.querySelector('#word-display');
     if (!display) return;
-    display.innerHTML = targetWord.split('').map((letter, i) => {
+    display.innerHTML = targetWord.split('').map((_letter, i) => {
         const revealed = collectedLetters[i] !== undefined;
         return `<span class="word-slot ${revealed ? 'revealed' : ''}">${revealed ? collectedLetters[i] : '_'}</span>`;
     }).join('');
@@ -477,6 +460,7 @@ const getLetterPosition = (letter) => {
     return { x: r.left + r.width / 2 - 125, y: r.top + r.height / 2 - 40 };
 };
 
+//  moves planchette to each letter in sequence, then hands control to player
 const spiritSpellNext = () => {
     if (spiritSpellIndex >= targetWord.length) {
         setTimeout(() => {
@@ -516,8 +500,8 @@ const checkGameLetter = (letter) => {
         if (collectedLetters.length === targetWord.length) {
             gamePhase = 'idle';
             score++;
-            showPopup('✦ THE SPIRITS ARE PLEASED ✦', `round ${currentRound} of ${MAX_ROUNDS} complete`, 2500);
-            setTimeout(() => { hauntScreen(); setTimeout(startGame, 5000); }, 800);
+            showPopup('✦ THE SPIRITS ARE PLEASED ✦', `round ${currentRound} of ${MAX_ROUNDS} complete`, 1500);
+            setTimeout(() => { hauntScreen(); setTimeout(startGame, 2500); }, 800);
         }
     } else {
         lastWrongLetter = letter;
@@ -536,8 +520,8 @@ const shakeBoard = () => {
 };
 
 // Animation loop 
-
 const init = () => {
+    // smoothly moves current position toward target — creates the "heavy" drag feel
     currentX += (targetX - currentX) * friction;
     currentY += (targetY - currentY) * friction;
     const speed = Math.sqrt((currentX - prevX) ** 2 + (currentY - prevY) ** 2);
@@ -554,5 +538,4 @@ const init = () => {
     checkLetterHover();
     requestAnimationFrame(init);
 };
-
 init();

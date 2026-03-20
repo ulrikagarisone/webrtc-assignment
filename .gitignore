@@ -1,1 +1,12 @@
-node_modules
+.vscode/
+.DS_Store
+node_modules/
+*.crt
+*.key
+.env
+.env.test
+logs
+*.log
+npm-debug.log*
+.npm
+.cache
