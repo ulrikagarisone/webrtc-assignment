@@ -3,6 +3,15 @@
 ## Project Overview Idea
 This project is a one-to-one interactive experience where a smartphone (mobile) acts as a planchette to control a desktop Ouija board. It uses WebSockets for signaling and WebRTC Data Channels for real-time sensor-based control.
 
+## How to Run
+
+1. `npm install`
+2. `npm start`
+3. Open the HTTPS URL printed in the terminal in Chrome
+4. Scan the QR code with your iPhone — open in **Safari** or Chrome
+5. Both devices must accept the SSL warning (Advanced → Proceed) since the certificate is self-signed with mkcert
+6. Both devices must be on the **same WiFi network** as the laptop running the server
+
 ## Development Diary
 
 ### Feb 17 – 21, 2026: Project Setup

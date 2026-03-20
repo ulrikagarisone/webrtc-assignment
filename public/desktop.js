@@ -237,8 +237,8 @@ const createPeer = (initiator, peerId) => {
         try {
             const motion = JSON.parse(data);
             if (!possessed && gamePhase !== 'watching') {
-                targetX += motion.x * 1.6;
-                targetY += motion.y * 1.6;
+                targetX += motion.x * 1.0;
+                targetY += motion.y * 1.0;
             }
             targetX = Math.max(0, Math.min(window.innerWidth - 250, targetX));
             targetY = Math.max(0, Math.min(window.innerHeight - 250, targetY));
