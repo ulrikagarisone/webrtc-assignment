@@ -16,6 +16,7 @@ let peer;
 // Ghost
 let ghostImage = null;
 let ghostCooldown = false;
+const ghostSheet = new Image(); 
 
 // Possession
 let possessed = false;
@@ -84,7 +85,6 @@ const loadSound = async (url) => {
 };
 
 // Audio 
-
 const initAudio = async () => {
     if (audioCtx) return;
     try {
@@ -131,32 +131,26 @@ const stopSpiritSound = () => {
 };
 
 // Possession 
-
 const showPossessionEffect = () => {
-    const vignette = createOverlay('position:fixed;inset:0;background:radial-gradient(ellipse at center, transparent 30%, rgba(80,0,0,0.85) 100%);pointer-events:none;z-index:997;opacity:0;transition:opacity 0.8s;');
+    const vignetteCSS = 'position:fixed;inset:0;pointer-events:none;z-index:997;opacity:0;transition:opacity 0.8s;' +
+        'background:radial-gradient(ellipse at center, transparent 30%, rgba(80,0,0,0.85) 100%);';
+
+    const flashCSS = 'position:fixed;inset:0;pointer-events:none;z-index:998;transition:opacity 1.2s;' +
+        'background:rgba(140,0,0,0.4);';
+
+    const vignette = createOverlay(vignetteCSS);
+    const flash = createOverlay(flashCSS);
+
     setTimeout(() => { vignette.style.opacity = '1'; }, 50);
-    const flash = createOverlay('position:fixed;inset:0;background:rgba(140,0,0,0.4);pointer-events:none;z-index:998;transition:opacity 1.2s;');
     setTimeout(() => { flash.style.opacity = '0'; }, 200);
+
     return { vignette, flash };
 };
-
-const shakeBoardTitle = () => {
-    const title = document.querySelector('#board-title');
-    if (!title) return;
-    let shakes = 0;
-    const iv = setInterval(() => {
-        title.style.transform = `translate(${(Math.random() - 0.5) * 12}px,${(Math.random() - 0.5) * 8}px)`;
-        if (++shakes > 10) { clearInterval(iv); title.style.transform = ''; }
-    }, 80);
-};
-
-
 
 const triggerPossession = async () => {
     if (possessed) return;
     possessed = true;
     const { vignette, flash } = showPossessionEffect();
-    shakeBoardTitle();
     if (audioCtx) {
         try {
             const decoded = await loadSound('/assets/possesd_sound.mp3');
@@ -183,7 +177,6 @@ const triggerPossession = async () => {
 };
 
 // Socket and peer 
-
 socket.on('connect', () => {
     console.log('Desktop connected:', socket.id);
     socket.emit('join', roomId);
@@ -237,8 +230,8 @@ const createPeer = (initiator, peerId) => {
         try {
             const motion = JSON.parse(data);
             if (!possessed && gamePhase !== 'watching') {
-                targetX += motion.x * 1.0;
-                targetY += motion.y * 1.0;
+                targetX += motion.x;
+                targetY += motion.y;
             }
             targetX = Math.max(0, Math.min(window.innerWidth - 250, targetX));
             targetY = Math.max(0, Math.min(window.innerHeight - 250, targetY));
@@ -254,8 +247,6 @@ const createPeer = (initiator, peerId) => {
 };
 
 // Ghost
-
-const ghostSheet = new Image();
 ghostSheet.src = '/assets/ghost.png';
 ghostSheet.onload = () => console.log('Ghost sheet loaded');
 
@@ -291,18 +282,6 @@ const buildGhostImage = ($video) => {
     console.log('Ghost+face composite ready!');
 };
 
-const spawnSmoke = ($ghost) => {
-    const smoke = document.createElement('div');
-    smoke.classList.add('smoke');
-    const size = 50 + Math.random() * 70;
-    smoke.style.width = size + 'px';
-    smoke.style.height = size + 'px';
-    smoke.style.left = (parseFloat($ghost.style.left) + 120) + 'px';
-    smoke.style.top = (parseFloat($ghost.style.top) + 250) + 'px';
-    document.body.appendChild(smoke);
-    setTimeout(() => smoke.remove(), 1800);
-};
-
 const hauntScreen = () => {
     if (ghostCooldown || !ghostImage) return;
     const $ghost = document.querySelector('#ghost-container');
@@ -320,17 +299,14 @@ const hauntScreen = () => {
         $ghost.style.left = endX + 'px';
         $ghost.style.top = (startY - 120) + 'px';
     }, 50);
-    const smokeInterval = setInterval(() => spawnSmoke($ghost), 160);
     ghostCooldown = true;
     setTimeout(() => {
         $ghost.style.opacity = '0';
-        clearInterval(smokeInterval);
         setTimeout(() => { ghostCooldown = false; }, 500);
     }, 3500);
 };
 
 // Letter detection 
-
 const glowStyle = document.createElement('style');
 glowStyle.textContent = `
     .board-letter, .board-word {
@@ -364,6 +340,7 @@ document.querySelectorAll('.yes-no-row span').forEach(span => {
     span.classList.add('board-word');
 });
 
+// cached after spans are built
 const letterElements = [...document.querySelectorAll('.board-letter, .board-word')];
 const letterRects = letterElements.map(el => ({ el, r: el.getBoundingClientRect() }));
 
@@ -398,7 +375,6 @@ const checkLetterHover = () => {
 };
 
 // Game logic
-
 const showPopup = (title, sub = '', duration = 0) => {
     document.querySelector('#popup-title').textContent = title;
     document.querySelector('#popup-sub').textContent = sub;
@@ -413,7 +389,7 @@ const hidePopup = () => {
 const renderWordDisplay = () => {
     const display = document.querySelector('#word-display');
     if (!display) return;
-    display.innerHTML = targetWord.split('').map((letter, i) => {
+    display.innerHTML = targetWord.split('').map((_letter, i) => {
         const revealed = collectedLetters[i] !== undefined;
         return `<span class="word-slot ${revealed ? 'revealed' : ''}">${revealed ? collectedLetters[i] : '_'}</span>`;
     }).join('');
