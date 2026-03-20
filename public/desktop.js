@@ -342,6 +342,7 @@ document.querySelectorAll('.yes-no-row span').forEach(span => {
 
 // cached after spans are built
 const letterElements = [...document.querySelectorAll('.board-letter, .board-word')];
+// cached at startup, board never moves so positions stay valid
 const letterRects = letterElements.map(el => ({ el, r: el.getBoundingClientRect() }));
 
 const checkLetterHover = () => {
@@ -459,6 +460,7 @@ const getLetterPosition = (letter) => {
     return { x: r.left + r.width / 2 - 125, y: r.top + r.height / 2 - 40 };
 };
 
+//  moves planchette to each letter in sequence, then hands control to player
 const spiritSpellNext = () => {
     if (spiritSpellIndex >= targetWord.length) {
         setTimeout(() => {
@@ -498,8 +500,8 @@ const checkGameLetter = (letter) => {
         if (collectedLetters.length === targetWord.length) {
             gamePhase = 'idle';
             score++;
-            showPopup('✦ THE SPIRITS ARE PLEASED ✦', `round ${currentRound} of ${MAX_ROUNDS} complete`, 2500);
-            setTimeout(() => { hauntScreen(); setTimeout(startGame, 5000); }, 800);
+            showPopup('✦ THE SPIRITS ARE PLEASED ✦', `round ${currentRound} of ${MAX_ROUNDS} complete`, 1500);
+            setTimeout(() => { hauntScreen(); setTimeout(startGame, 2500); }, 800);
         }
     } else {
         lastWrongLetter = letter;
@@ -518,8 +520,8 @@ const shakeBoard = () => {
 };
 
 // Animation loop 
-
 const init = () => {
+    // smoothly moves current position toward target — creates the "heavy" drag feel
     currentX += (targetX - currentX) * friction;
     currentY += (targetY - currentY) * friction;
     const speed = Math.sqrt((currentX - prevX) ** 2 + (currentY - prevY) ** 2);

@@ -34,6 +34,8 @@ if (roomId) {
         if (peer) peer.signal(signal);
     });
 
+    // whichever arrives last (camera or desktop id) triggers the peer connection
+    // buttonClicked flag ensures stream is ready before creating peer
     const createPeer = (initiator, peerId) => {
         console.log('Creating peer, stream:', myStream ? 'YES' : 'NO');
         peer = new SimplePeer({
