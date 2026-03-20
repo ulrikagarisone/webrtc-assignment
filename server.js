@@ -12,12 +12,10 @@ const options = {
 const server = https.createServer(options, app);
 const port = process.env.PORT || 3000;
 const io = new Server(server);
-const clients = {};
 
 app.use(express.static('public'));
 
 io.on('connection', (socket) => {
-    clients[socket.id] = { id: socket.id };
     console.log('Socket connected', socket.id);
 
     socket.on('join', (roomId) => {
@@ -36,7 +34,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('disconnect', () => {
-        delete clients[socket.id];
+        console.log('Socket disconnected', socket.id);
     });
 });
 

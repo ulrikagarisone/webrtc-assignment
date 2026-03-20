@@ -89,7 +89,7 @@ if (roomId) {
     document.querySelector('#start').addEventListener('click', async () => {
         document.querySelector('#start').style.display = 'none';
 
-        // Motion permission first — iOS loses gesture context after any await
+        // Motion permission first. iOS loses gesture context after any await
         const motionGranted = await requestMotionPermission();
         if (!motionGranted) {
             alert('Motion permission is required to play.');
