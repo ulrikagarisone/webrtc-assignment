@@ -1,53 +1,102 @@
 # WebRTC Assignment: The Ouija Experience 
 
 ## Project Overview Idea
-This project is a one-to-one interactive experience where a smartphone (mobile) acts as a planchette to control a desktop Ouija board. It utilizes WebSockets for signaling and WebRTC Data Channels for real-time sensor-based control.
+This project is a one-to-one interactive experience where a smartphone (mobile) acts as a planchette to control a desktop Ouija board. It uses WebSockets for signaling and WebRTC Data Channels for real-time sensor-based control.
 
 ## Development Diary
 
-### Feb 17, 2026: Project initialization
-* **Setup**: Created the repository.
-* **Architecture**: Established a Node.js server with Express and Socket.io. 
-* **Structure**: Organized the `/public` directory with dedicated files for `desktop` (receiver) and `mobile` (controller).
-* **Installed** qrcode library to handle the one-to-one connection requirement. Verified that package.json includes all necessary dependencies for a clean npm install by the instructors.
-* **AI Reflection**: 
-    * **Use**: Consulted AI to help me with the "Ouija Board" concept to maximize bonus points for sensors and video.
-    * **Modifications**: AI suggested a complex 3D setup, but I refactored the plan to a 2D approach to stay within my current technical comfort level and ensure stability.
-    * **Git**: Used AI to troubleshoot a `refs/heads/main` error during the first push.
+### Feb 17 – 21, 2026: Project Setup
 
-### Feb 21, 2026: Project setup
-##  Phase 1: Environment & workflow setup
-* **Branching Strategy**: Following **GitHub Flow**, I moved development from `main` to a `feature/setup` branch.
-* **Dependencies**: Initialized `package.json` and installed the "Team" of libraries: `express`, `socket.io`, and `qrcode`.
-* **AI Reflection**: I used AI to verify my `package.json` structure and to learn the Git commands needed to move my initial work into a feature branch without losing progress.
+---
 
-## Phase 2: The "ghost host" (signaling server)
-* **Goal**: Create a relay station so the two devices can find each other.
-* **Implementation**: Built `server.js` using `socket.io`. 
-    * Used `socket.on('join')` to create private rooms based on a unique ID.
-    * Set up a `signal` relay to pass WebRTC handshake data.
-* **Best Practices**: Mirrored the signaling patterns found in the `creative-code-4-s26` repository.
+## Phase 1 — Server & Signalling
 
-## Phase 3: The board (desktop implementation)
-* **Goal**: Generate a "Secret Handshake" (QR Code) for the phone.
-* **Step-by-Step Development**:
-    1. **Room ID**: Created a unique string using `Math.random().toString(36).substring(2, 11)`.
-    2. **QR Generation**: Used the `QRCode` library to turn the mobile URL into a scanable canvas element.
-    3. **WebRTC Setup**: Initialized `SimplePeer` as a receiver (`initiator: false`).
-* **AI Reflection**: AI helped me fix a "deprecated" warning by suggesting I switch from `.substr()` to `.substring()`. I also used AI to understand how to target the HTML `<canvas>` correctly for the QR code display.
+**Goal:** Build the server that lets two devices find each other and set up a WebRTC connection.
 
-## Phase 4: The tablet (mobile implementation)
-* **Goal**: Allow the phone to join the room and start the connection.
-* **Implementation**:
-    1. **URL Parsing**: Used `URLSearchParams` to grab the `room` ID automatically after the QR scan.
-    2. **WebRTC Setup**: Initialized `SimplePeer` as the **Initiator** (`initiator: true`) to "call" the desktop.
-* **AI Reflection**: I used AI to ensure the mobile device was set as the initiator, matching the logic taught in class for mobile-to-desktop pairing.
+#### What AI gave me
 
-### AI collaboration log:
+AI generated this initial server — it used a hardcoded Mac hostname that would break on any other computer, and a signal relay that passed the whole data object instead of separating peerId and signal:
 
-* **Problem 1 (The syntax)**: My code used `.substr()`, but VS Code and my phone console warned me it was deprecated.
-    * **AI Help**: Gemini explained that `.substr()` is an old "legacy" feature.
-    * **The Fix**: I changed it to `.substring(2, 11)` to make the Room ID logic modern and stable for all browsers.
+```javascript
+// AI's first server.js — hardcoded hostname, breaks everywhere else
+const PORT = 3000;
+server.listen(PORT, () => {
+    console.log(`Go to: http://Ulrikas-MacBook-Pro.local:${PORT}/desktop.html`);
+});
+
+// AI's signal relay — messy, bundles roomId into data object
+socket.on('signal', (data) => {
+    socket.to(data.roomId).emit('signal', {
+        sender: socket.id,
+        signal: data.signal
+    });
+});
+```
+
+AI also gave me this for the Room ID in `desktop.js` — using the deprecated `.substr()`:
+```javascript
+// AI's version — deprecated method
+const roomId = Math.random().toString(36).substr(2, 9);
+```
+
+#### What I changed
+
+I made the server dynamic so it prints the actual IP address at startup — so it works on any machine and any network without editing the code:
+
+```javascript
+// My fix — works on any machine
+server.listen(PORT, '0.0.0.0', () => {
+    const interfaces = os.networkInterfaces();
+    for (const name of Object.keys(interfaces)) {
+        for (const net of interfaces[name]) {
+            if (net.family === 'IPv4' && !net.internal) {
+                console.log(`https://${net.address}:${PORT}`);
+            }
+        }
+    }
+});
+```
+
+I also rebuilt the signal relay to match the class pattern exactly — separate `peerId` and `signal` params, and the three-argument emit so the receiver knows who sent it:
+
+```javascript
+// My version — matches class example pattern
+socket.on('signal', (peerId, signal) => {
+    io.to(peerId).emit('signal', peerId, signal, socket.id);
+});
+```
+
+And updated the Room ID to use modern `.substring()`:
+```javascript
+// My fix — modern, supported in all browsers
+const roomId = Math.random().toString(36).substring(2, 11);
+```
+
+---
+
+## Phase 2 — QR Code Pairing
+
+#### What AI gave me
+
+AI hardcoded a static URL for the QR code — this would only work on one specific network:
+
+```javascript
+// AI's version — hardcoded, only works on one network
+const url = 'http://Ulrikas-MacBook-Pro.local:3000/mobile.html?room=' + roomId;
+QRCode.toCanvas(document.getElementById('qr-canvas'), url);
+```
+
+AI also used `getElementById` for the canvas element.
+
+#### What I changed
+
+I switched to `window.location` so the URL adapts automatically to whatever address the server is running on. I also switched to `querySelector`:
+
+```javascript
+// My fix — dynamic, works on any network
+const url = `${window.location.protocol}//${window.location.host}/mobile.html?room=${roomId}`;
+QRCode.toCanvas(document.querySelector('#qr-canvas'), url);
+```
 
 
 **The Problem**: My project worked perfectly on my Mac, but when I scanned the QR code with my iPhone, I got a "Server Not Found" error. I had to troubleshoot the network path between the two devices.
@@ -61,7 +110,7 @@ This project is a one-to-one interactive experience where a smartphone (mobile) 
     `const url = 'http://Ulrikas-MacBook-Pro.local:3000/...'`
 * **Result**: This worked occasionally, but proved unreliable. I learned that hostnames like `.local` depend on specific router configurations and "mDNS" support, which isn't always stable on every Wi-Fi network.
 
-#### Step 3: The olution (Dynamic IP)
+#### Step 3: The solution (Dynamic IP)
 * **The Final Fix**: I realized that "hardcoding" any specific name (like `Ulrikas-MacBook-Pro`) or number (like an IP) directly into the code makes the project fragile.
 * **Implementation**:
     1.  **Dynamic URLs**: I refactored the QR code logic to use `window.location.origin`. This allows the URL to adapt automatically to whatever address I use to open the site on my Mac.
@@ -228,12 +277,6 @@ I organized the scripts to ensure dependencies load before the main logic.
 </html>
 ```
 
-
-## Current status
-- [x] Local server running with `npm start`
-- [x] One-to-one pairing via QR Code
-- [x] Successful WebRTC "CONNECTED" log in console
-
 # Phase 2: Polish, Physics & Paranormal Atmosphere (Feb 24 - 26, 2026)
 
 ---
@@ -242,29 +285,95 @@ I organized the scripts to ensure dependencies load before the main logic.
 
 **Goal:** Transition from a "mouse pointer" feel to a "heavy wooden board" feel.
 
-**The Problem:** Initially, the planchette "teleported" to the phone's coordinates. It felt digital and glitchy.
+**The Problem:** Initially, the planchette "teleported" instantly to wherever the phone was tilted — it felt like a cursor, not a haunted object.
 
-**Implementation:**
+#### What AI gave me
 
-- **Lerp (Linear Interpolation):** I implemented a `currentX += (targetX - currentX) * friction` loop.
-- **Friction Tuning:** Set the friction to `0.05` to create a "ghostly" lag that feels like physical weight.
-- **Clamping:** Added `Math.max` and `Math.min` boundaries to ensure the spirit doesn't drag the planchette off-screen.
+AI explained the Lerp (linear interpolation) concept and gave me this pattern — the planchette chases its target instead of jumping to it:
 
-**AI Reflection:** I collaborated with AI to understand the "Lerp" math. Initially, my planchette was flying off-screen because I was adding movement indefinitely; AI helped me implement "Clamping" to keep it within the window.
+```javascript
+// AI's lerp concept
+peer.on('data', data => {
+    const motion = JSON.parse(data);
+    targetX += motion.x * 2.5;
+    targetY += motion.y * 2.5;
+});
+
+function animate() {
+    currentX += (targetX - currentX) * 0.05; // lerp toward target
+    currentY += (targetY - currentY) * 0.05;
+    planchette.style.left = currentX + 'px';
+    planchette.style.top = currentY + 'px';
+    requestAnimationFrame(animate);
+}
+animate();
+```
+
+#### What I changed
+
+AI's version didn't include any boundaries — the planchette flew off screen if you tilted too far. I added clamping with `Math.max` / `Math.min` to keep it inside the window:
+
+```javascript
+// My addition — boundaries so it can't leave the screen
+peer.on('data', data => {
+    const motion = JSON.parse(data);
+    targetX += motion.x * 2.5;
+    targetY += motion.y * 2.5;
+    targetX = Math.max(0, Math.min(window.innerWidth - 250, targetX));
+    targetY = Math.max(0, Math.min(window.innerHeight - 250, targetY));
+});
+```
+
+I also reduced friction from `0.05` to `0.02` after testing — `0.05` was too snappy and didn't feel heavy enough. At `0.02` the planchette lags behind meaningfully, like something being dragged through resistance.
 
 ---
 
-## 2. The Secure Handshake (The "Sensor Lock" Breakthrough)
+## 2. The connection with gyroscope
 
 **Goal:** Unlock the mobile gyroscope to allow "Tilt-to-move" controls.
 
 **The Problem:** I saw a "Sensor Permission Denied" error in the mobile console. The phone connected, but wouldn't send data.
 
-**The AI Collaboration:** I prompted the AI about the error. It explained that modern browsers require a Secure Context (HTTPS) to access sensors. The AI suggested installing complex third-party SSL tools.
+**What AI suggested:**
 
-**The Class Integration:** I recalled the class example using a local HTTPS server. Instead of following the AI's complex route, I used the class-approved method using `key.pem` and `cert.pem`.
+AI told me to install a third-party SSL proxy tool and set up a domain tunnel. It gave me this complicated setup involving ngrok and external services:
 
-**The Fix:** Refactored `server.js` from an `http` server to an `https` server using the `fs` module to read my security keys.
+```bash
+# AI's suggestion — complex, requires external account
+npm install -g ngrok
+ngrok http 3000
+# then update all your URLs to the ngrok tunnel address
+```
+
+This was overly complicated and would break every time the tunnel URL changed.
+
+**What I actually did — class method with mkcert:**
+
+Instead I used the method from the class examples: `mkcert`. This creates a local Certificate Authority that your devices trust permanently:
+
+```bash
+brew install mkcert
+mkcert -install
+mkcert localhost 127.0.0.1 ::1
+mv localhost+2.pem localhost.crt
+mv localhost+2-key.pem localhost.key
+```
+
+Then updated `server.js` to use HTTPS:
+
+```javascript
+const https = require('https');
+const fs = require('fs');
+
+const options = {
+    key: fs.readFileSync('./localhost.key'),
+    cert: fs.readFileSync('./localhost.crt')
+};
+
+const server = https.createServer(options, app);
+```
+
+AirDropped the `rootCA.pem` to my iPhone and enabled Full Trust in iOS Settings → Certificate Trust Settings. Now the phone trusted my laptop as a secure server on any network — no external services, no tunnel.
 
 ---
 
@@ -272,83 +381,87 @@ I organized the scripts to ensure dependencies load before the main logic.
 
 **Goal:** Replace the "Tech Demo" look with a mystical, fire-lit ritual interface.
 
-- **Flickering Candle Effect:** Created a CSS `@keyframes` animation that fluctuates `text-shadow` and `scale` to mimic a dancing flame.
-- **The "Stage" System:** Used CSS Flexbox and JavaScript to hide the "Intro" screen and reveal the "Controller" screen (featuring the `heart_teller.png` asset) only after a successful P2P connection.
+#### What AI gave me
 
-**The Brainstorming:**
+AI gave me a candle flicker animation using `@keyframes` to fluctuate `text-shadow` and `scale` on the title, and a stage-switch system using JavaScript to hide the intro screen and show the controller once connected:
 
-While setting up the tilt controls, the AI suggested that a static image on the phone felt "dead." To solve this, the AI proposed a **3D Parallax effect** — making the planchette on the phone screen tilt in real-time to match the physical tilt of the hand.
-
-**The AI's Code Suggestion:**
-
-The AI provided this specific logic to map the gyroscope's `gamma` and `beta` degrees directly to CSS 3D transforms:
+```css
+/* AI's candle flicker animation */
+@keyframes flicker {
+    0%, 100% {
+        text-shadow: 0 0 10px rgba(212,175,55,0.3), 0 0 20px rgba(255,140,0,0.1);
+        transform: scale(1);
+    }
+    50% {
+        text-shadow: 0 0 30px rgba(212,175,55,0.7), 0 0 40px rgba(255,140,0,0.3);
+        transform: scale(1.01);
+    }
+}
+h1 { animation: flicker 3s infinite alternate; }
+```
 
 ```javascript
-// AI-suggested code for real-time visual feedback:
+// AI's stage switch — hide intro, show controller on connect
+peer.on('connect', () => {
+    document.getElementById('intro-ui').style.display = 'none';
+    document.getElementById('planchette-ui').style.display = 'flex';
+});
+```
+
+#### What I changed
+
+The `getElementById` calls needed to become `querySelector`. I also added a fade transition so the screen change isn't abrupt — the intro fades out over 1 second before the controller appears:
+
+```javascript
+// My version — querySelector + fade transition
+peer.on('connect', () => {
+    const intro = document.querySelector('#intro-ui');
+    intro.style.transition = 'opacity 1s';
+    intro.style.opacity = '0';
+    setTimeout(() => {
+        intro.style.display = 'none';
+        const ui = document.querySelector('#planchette-ui');
+        ui.style.display = 'flex';
+        setTimeout(() => { ui.style.opacity = '1'; }, 10);
+    }, 1000);
+});
+```
+
+While setting up the tilt controls, AI also suggested a **3D Parallax effect** on the phone planchette image.
+
+**What AI gave me:**
+
+AI suggested the phone planchette image should tilt in 3D to match the physical tilt of the hand — giving the user visual feedback that their tilting is being tracked. It gave me this full implementation:
+
+```javascript
+// AI's suggestion — 3D parallax on the phone planchette
 window.addEventListener('deviceorientation', (event) => {
     const img = document.getElementById('planchette-img');
-
     if (img) {
-        // Map phone tilt to 3D rotation
-        // rotateY uses gamma (left/right tilt)
-        // rotateX uses beta (forward/backward tilt)
+        // gamma = left/right tilt, beta = forward/back tilt
         img.style.transform = `rotateY(${event.gamma}deg) rotateX(${-event.beta}deg)`;
     }
 });
 ```
 
-**The Result:** By implementing this, I moved from a simple "data sender" to a **Tactile Controller**. The user gets immediate visual feedback on their phone, making the connection to the desktop planchette feel "magical" and physically linked.
+**What I changed:**
 
----
-
-## Code Evolution & AI Collaboration Log
-
-### 1. Movement Logic
-
-#### ❌ Initial AI Draft (Static Positioning)
+I kept this mostly as-is because it was a genuinely good suggestion. The only thing I changed was switching `getElementById` to `querySelector` and caching the `img` element outside the event listener so it isn't queried 60 times per second:
 
 ```javascript
-peer.on('data', data => {
-    const motion = JSON.parse(data);
-    planchette.style.left = motion.x + "px"; // Teleported instantly
-});
-```
-
-#### ✅ Refactored "Heavy" Final (Collaborative)
-
-```javascript
-function animate() {
-    // The "Chasing" math that makes it feel heavy
-    currentX += (targetX - currentX) * friction;
-    planchette.style.transform = `translate3d(${currentX}px, ${currentY}px, 0)`;
-    requestAnimationFrame(animate);
-}
-```
-
----
-
-### 2. Server Security
-
-#### ❌ Initial AI Draft (Insecure)
-
-```javascript
-const http = require('http');
-const server = http.createServer(app); // Blocked sensors on mobile
-```
-
-#### ✅ Refactored "Secure" Final (Class Example Method)
-
-```javascript
-const https = require('https');
-
-const options = {
-    key: fs.readFileSync('key.pem'),
-    cert: fs.readFileSync('cert.pem')
+// My version — querySelector + cached outside the listener
+const startMoving = () => {
+    const img = document.querySelector('#planchette-img'); // cached once
+    window.addEventListener('deviceorientation', (event) => {
+        if (img) img.style.transform = `rotateY(${event.gamma}deg) rotateX(${-event.beta}deg)`;
+        if (peer && peer.connected) {
+            peer.send(JSON.stringify({ x: event.gamma, y: event.beta }));
+        }
+    });
 };
-
-const server = https.createServer(options, app); // Successfully unlocked Gyroscope
 ```
 
+This turned the phone from a data sender into a tactile controller — users feel physically connected to the desktop board.
 ---
 
 ## 1. Initial Plan — AI Suggested WebRTC
@@ -382,15 +495,15 @@ peer.on('data', data => {
 });
 ```
 
-This worked perfectly on my home Wi-Fi. I was happy. Then I went to school.
+This worked perfectly on my home Wi-Fi. I was happy. Then I went to uni and the planchette connected but wouldn't move — motion data wasn't getting through
 
 ---
 
-## 2. The Home vs. School Mystery
+## 2. The Home vs. University Mystery
 
-**The problem:** Everything broke the moment I switched to school Wi-Fi or my phone hotspot.
+**The problem:** Everything broke the moment I switched to university Wi-Fi  (planchette connected but wouldn't move) or my phone hotspot.
 
-**What I figured out:**
+**I noticed the IP addresses were different between home and school, which led me to research why that mattered.**
 - **Home Wi-Fi** (`192.168.x.x`) — permissive NAT, devices can see each other directly ✅
 - **School Wi-Fi** (`172.30.x.x`) — uses **Client Isolation**. The firewall acts like a one-way mirror. Devices can reach the internet but cannot talk to each other directly ❌
 
@@ -540,7 +653,7 @@ socket.on('motion', (data) => {
 ```
 
 **Result:** Works on home Wi-Fi, school Wi-Fi, hotspot — any network where the phone can reach the laptop. No external servers, no TURN relays, no complexity.
-
+**However:**The Socket.io relay worked, but it wasn't the right architecture — the assignment specifically requires WebRTC data channels for the controls. At the next consult it was confirmed and the end desition was to go back and restracture everything as we did in class. I rebuilt it properly using SimplePeer with Socket.io for signalling only, which is documented in Day 2.
 ---
 ## Day 2 — Consulsult & Rebuilding Clean
 
@@ -614,7 +727,7 @@ peer.on('signal', data => {
 });
 ```
 
-**Fixed mobile.js — wait for desktop's real socket.id:**
+**Fixed mobile.js with AI — wait for desktop's real socket.id:**
 ```javascript
 let desktopId = null;
 
@@ -653,7 +766,7 @@ const createPeer = (initiator, peerId) => {
 
 ### Desktop —  receiver
 
-Desktop does NOT create the peer on `peer-joined`. Instead it waits for the signal to arrive, and only creates the peer when an `offer` comes in — exactly like my teacher's `receiver.html`:
+Desktop does NOT create the peer on `peer-joined`. Instead it waits for the signal to arrive, and only creates the peer when an `offer` comes in — exactly like class `receiver.html`:
 
 ```javascript
 socket.on('signal', (myId, signal, peerId) => {
@@ -661,7 +774,7 @@ socket.on('signal', (myId, signal, peerId) => {
     if (peer) {
         peer.signal(signal); // already exists, just pass signal
     } else if (signal.type === 'offer') {
-        createPeer(false, peerId); // ✅ create only when offer arrives
+        createPeer(false, peerId); //  create only when offer arrives
         peer.signal(signal);
     }
 });
@@ -735,7 +848,7 @@ socket.on('signal', (myId, signal, peerId) => {
 });
 ```
 
-**The bug I had to fix myself:**
+**The bug I had to fix**
 
 Mobile was sending signals to `roomId` (a random string like `"q6601qq3y"`) instead of the desktop's actual `socket.id`. The peer connection was going nowhere.
 
@@ -855,7 +968,7 @@ is_orange = (r > 150) & (g < 120) & (b < 80)  # removes pumpkin
 alpha = np.where(is_dark | is_orange, 0, np.clip((brightness - 100) * 2, 0, 255))
 ```
 
-**Compositing order I figured out myself:**
+**Compositing order I figured**
 
 AI originally put the face *behind* the ghost sheet at very low opacity — you couldn't see it at all. I switched the order:
 
@@ -879,7 +992,7 @@ ctx.drawImage(ghostSheet, 0, 0, W, H);
 
 This gives the effect of the face being inside the ghost rather than just stuck on top of it.
 
-**Size tuning I did manually:**
+**Size tuning**
 
 ```javascript
 // AI had this at 2.8 — face was bigger than the ghost head
@@ -918,7 +1031,7 @@ peer.on('data', data => {
 ---
 
 # Dev Diary (March 9, 2026)
-## Letter Detection + Phone Feedback — AI Usage & What I Actually Changed
+## Letter Detection + Phone Feedback — AI Usage & What I Changed
 
 ---
 
@@ -1181,7 +1294,7 @@ gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 6);
 
 ### What I Changed
 
-**I dropped the spelling entirely.** Spelling specific words would break on different screen sizes since letter positions are pixel-based. Instead I made the planchette move to random positions every 500ms for 6 seconds — simpler, works on any screen, and honestly feels creepier because it's unpredictable:
+**I dropped the spelling entirely.** Spelling specific words would break on different screen sizes (but I added the back after consult) since letter positions are pixel-based. Instead I made the planchette move to random positions every 500ms for 6 seconds — simpler, works on any screen, and honestly feels creepier because it's unpredictable:
 
 ```javascript
 possessionInterval = setInterval(() => {
@@ -1573,4 +1686,3 @@ if (found === 'NO') {
     // else: do nothing during normal gameplay
 }
 ```
- 
